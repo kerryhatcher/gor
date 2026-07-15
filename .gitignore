@@ -36,3 +36,6 @@ lcov.info
 
 # Local scratch directory
 /tmp/
+
+# Pi coding agent artifacts
+.pi-subagents/
