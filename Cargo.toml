@@ -73,7 +73,6 @@ clap = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_yaml_ng = { workspace = true }
 keyring = { workspace = true, optional = true }
 thiserror = { workspace = true }
 dirs = { workspace = true }
@@ -86,8 +85,6 @@ indicatif = { workspace = true }
 console = { workspace = true }
 
 [dev-dependencies]
-assert_cmd = "2"
-assert_fs = "1"
 insta = "1"
 tempfile = "3"
 wiremock = "0.6"
