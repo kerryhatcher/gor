@@ -5,7 +5,7 @@
 [![CI](https://img.shields.io/badge/CI-passing-2ea043?style=flat-square)](https://github.com/gor-sh/gor/actions)
 [![crates.io](https://img.shields.io/crates/v/gor?style=flat-square)](https://crates.io/crates/gor)
 [![license](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg?style=flat-square)](LICENSE)
-[![MSRV](https://img.shields.io/badge/MSRV-1.85-blue?style=flat-square)](https://blog.rust-lang.org)
+[![MSRV](https://img.shields.io/badge/MSRV-1.86-blue?style=flat-square)](https://blog.rust-lang.org)
 
 A fast, self-contained GitHub CLI written in Rust.
 

@@ -6,8 +6,8 @@
 //! ## Architecture
 //!
 //! This crate uses a **library + binary** split:
-//! - [`lib.rs`] — all business logic, fully unit-testable
-//! - [`main.rs`] — thin entry point: parse args, init tracing, dispatch
+//! - `lib.rs` — all business logic, fully unit-testable
+//! - `main.rs` — thin entry point: parse args, init tracing, dispatch
 //!
 //! ## Quick start
 //!

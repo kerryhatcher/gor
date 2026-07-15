@@ -151,10 +151,10 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install MSRV toolchain
-        run: rustup toolchain install 1.85.0 --profile minimal --no-self-update
+        run: rustup toolchain install 1.86.0 --profile minimal --no-self-update
 
       - name: Check with MSRV
-        run: cargo +1.85.0 check --locked --all-features
+        run: cargo +1.86.0 check --locked --all-features
 
   security:
     name: Security audit

@@ -11,7 +11,7 @@ Instructions for LLM coding agents working on the `gor` repository.
 - **Binary:** `gor`
 - **Crate:** `gor` (published on crates.io)
 - **License:** MIT OR Apache-2.0
-- **MSRV:** 1.85
+- **MSRV:** 1.86
 - **Edition:** 2024
 
 ---
@@ -168,7 +168,7 @@ CI runs on every push and PR. Eight parallel jobs:
 | `doc` | doc generation warnings, doc tests |
 | `test` | nextest + doc tests on ubuntu, macos, windows |
 | `coverage` | llvm-cov + codecov upload |
-| `msrv` | cargo check with Rust 1.85 |
+| `msrv` | cargo check with Rust 1.86 |
 | `security` | cargo-audit via rustsec |
 | `trivy` | vuln, secret, and misconfig scanning via Trivy |
 | `kingfisher` | secret scanning with live validation via Kingfisher |

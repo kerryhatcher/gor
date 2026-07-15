@@ -1,7 +1,7 @@
 //! Error types for the `gor` library.
 //!
 //! Uses [`thiserror`] for ergonomic error definitions with proper
-//! [`Display`] and [`std::error::Error`] implementations.
+//! `Display` and [`std::error::Error`] implementations.
 
 use thiserror::Error;
 
