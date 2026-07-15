@@ -1,0 +1,22 @@
+# Pre-commit hooks for the `gor` project.
+# Install: `pre-commit install` (after `pip install pre-commit`).
+# Run all: `pre-commit run --all-files`
+# See https://pre-commit.com/ for reference.
+
+repos:
+  - repo: https://github.com/AndrejOrsula/pre-commit-cargo
+    rev: 0.4.0
+    hooks:
+      - id: cargo-fmt
+      - id: cargo-clippy
+        args: ["--all-targets", "--all-features", "--", "-D", "warnings"]
+      - id: cargo-check
+  - repo: https://github.com/crate-ci/typos
+    rev: v1.48.0
+    hooks:
+      - id: typos
+
+# These cargo hooks run `cargo` and would slow down CI; skip them there
+# (CI runs clippy/fmt/check explicitly instead).
+ci:
+  skip: [cargo-fmt, cargo-clippy, cargo-check]

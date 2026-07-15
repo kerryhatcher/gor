@@ -1,0 +1,14 @@
+# typos-cli configuration for the `gor` project.
+# Run with `typos` (or let pre-commit / CI run it).
+# See https://github.com/crate-ci/typos/blob/HEAD/docs/reference.md
+
+[default.extend-words]
+# Common false positives for a GitHub CLI tool. Add project-specific tokens here.
+ba = "ba"
+crate = "crate"
+pn = "pn"
+recieve = "receive"
+
+[files]
+# Don't spellcheck lockfiles or build output.
+extend-exclude = ["Cargo.lock", "*.lock", "target/"]

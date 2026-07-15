@@ -1,0 +1,14 @@
+coverage:
+  status:
+    project:
+      default:
+        threshold: 1%
+    patch:
+      default:
+        threshold: 1%
+
+comment:
+  layout: "reach, diff, flags, files"
+
+github_checks:
+  annotations: false

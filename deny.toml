@@ -1,0 +1,67 @@
+# cargo-deny configuration for the `gor` project.
+# Run with `cargo deny check` (or `cargo deny check advisories|licenses|bans|sources`).
+# See https://embarkstudios.github.io/cargo-deny/ for the full reference.
+
+[graph]
+# Evaluate the dependency graph with all features enabled.
+all-features = true
+# Targets `gor` is built (and shipped) for. Keep in sync with the release matrix.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+    "x86_64-apple-darwin",
+    "aarch64-apple-darwin",
+    "x86_64-pc-windows-msvc",
+]
+
+[advisories]
+# Warn (not deny) on unmaintained crates so adoption isn't blocked, but surfaces risk.
+unmaintained = "warn"
+# Deny crates with known-unsound advisories — these are always a hard fail.
+unsound = "deny"
+# Warn on yanked crates; resolve by upgrading.
+yanked = "warn"
+# Temporary waivers go here, e.g. `RUSTSEC-2024-XXXX = "reason"`. Leave empty by default.
+
+[licenses]
+# Minimum confidence for license detection (0.0–1.0).
+confidence-threshold = 0.93
+# Permitted licenses (SPDX expressions).
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "MPL-2.0",
+]
+# Per-crate license exceptions (with reason) go here if ever needed.
+
+[bans]
+# Warn on duplicate major versions; flip to "deny" once the tree is deduplicated.
+multiple-versions = "warn"
+# Forbid wildcard (`*`) version requirements — every dep must be pinned.
+wildcards = "deny"
+# Highlight every duplicate in reports.
+highlight = "all"
+# Forbidden crates, with recommended alternatives.
+deny = [
+    { crate = "openssl", use-instead = "rustls" },
+    { crate = "openssl-sys", use-instead = "rustls" },
+    { crate = "git2", use-instead = "gix" },
+]
+# Explicitly allowed crates (none needed yet).
+skip = []
+# Allow an entire subtree of a crate to be skipped (none needed yet).
+skip-tree = []
+
+[sources]
+# Reject dependencies pulled from unknown registries.
+unknown-registry = "deny"
+# Reject dependencies pulled from unknown git sources.
+unknown-git = "deny"
+# Only the official crates.io index is permitted.
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
