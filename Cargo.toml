@@ -85,9 +85,11 @@ indicatif = { workspace = true }
 console = { workspace = true }
 
 [dev-dependencies]
-insta = "1"
-tempfile = "3"
-wiremock = "0.6"
+# Test dependencies will be added as integration tests are implemented.
+# - assert_cmd, assert_fs: CLI integration testing
+# - insta: snapshot testing
+# - tempfile: temporary file/directory fixtures
+# - wiremock: HTTP mocking for GitHub API
 
 [profile.release]
 opt-level = "z"
