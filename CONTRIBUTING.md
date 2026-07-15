@@ -8,11 +8,92 @@ Thanks for your interest in contributing! gor is a Rust rewrite of the GitHub CL
 
 ### Prerequisites
 
-- **Rust** 1.85 or later (`rustup toolchain install stable`)
-- **just** — command runner (`cargo install just` or `brew install just`)
-- **cargo-nextest** — test runner (`cargo install cargo-nextest` or `brew install nextest`)
-- **cargo-deny** — supply-chain checks (`cargo install cargo-deny`)
-- **typos-cli** — spellcheck (`cargo install typos-cli` or `brew install typos-cli`)
+| Tool | Purpose | Official Docs |
+|------|---------|---------------|
+| **Rust** 1.85+ | Compiler & toolchain | [rustup.rs](https://rustup.rs) |
+| **just** | Command runner | [just.systems](https://just.systems) |
+| **cargo-nextest** | Test runner | [nexte.st](https://nexte.st) |
+| **cargo-deny** | Supply-chain checks | [cargo-deny](https://embarkstudios.github.io/cargo-deny/) |
+| **typos-cli** | Spellcheck | [typos](https://github.com/crate-ci/typos) |
+| **Trivy** | Vuln, secret & misconfig scanning | [trivy.dev](https://trivy.dev) |
+| **Kingfisher** | Secret scanning with live validation | [Kingfisher](https://mongodb.github.io/kingfisher/) |
+
+#### Rust (rustup)
+
+The recommended way to install Rust is via [rustup](https://rustup.rs):
+
+```bash
+# Linux / macOS / WSL
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Windows (PowerShell)
+# Download and run: https://win.rustup.rs
+```
+
+After installation, ensure the stable toolchain is active:
+
+```bash
+rustup toolchain install stable
+rustup default stable
+```
+
+#### just, cargo-nextest, cargo-deny, typos-cli
+
+```bash
+# All platforms (via cargo)
+cargo install just cargo-nextest cargo-deny typos-cli
+
+# macOS (via Homebrew)
+brew install just nextest cargo-deny typos-cli
+
+# Linux — use cargo or distro packages where available
+```
+
+#### Trivy
+
+```bash
+# macOS
+brew install trivy
+
+# Linux (Debian/Ubuntu)
+sudo apt-get install -y wget apt-transport-https gnupg
+wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
+sudo apt-get update && sudo apt-get install -y trivy
+
+# Linux (RHEL/CentOS/Fedora)
+sudo rpm -ivh https://github.com/aquasecurity/trivy/releases/latest/download/trivy.rpm
+
+# Windows (Scoop / Chocolatey)
+scoop install trivy
+# or
+choco install trivy
+
+# Docker (no local install needed)
+docker run --rm -v "$PWD":/src aquasec/trivy fs /src
+```
+
+See the [Trivy installation docs](https://trivy.dev/docs/latest/getting-started/installation/) for more options.
+
+#### Kingfisher
+
+```bash
+# macOS
+brew install kingfisher
+
+# Linux / macOS (installer script)
+curl -sSL https://raw.githubusercontent.com/mongodb/kingfisher/main/scripts/install-kingfisher.sh | bash
+
+# PyPI
+uv tool install kingfisher-bin
+# or
+pip install kingfisher-bin
+
+# Docker (no local install needed)
+docker run --rm -v "$PWD":/src ghcr.io/mongodb/kingfisher:latest scan /src
+```
+
+See the [Kingfisher installation docs](https://mongodb.github.io/kingfisher/getting-started/installation/) for more options.
 
 ### Setup
 

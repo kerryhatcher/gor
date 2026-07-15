@@ -8,6 +8,9 @@ ba = "ba"
 crate = "crate"
 pn = "pn"
 recieve = "receive"
+# Valid crate names — not typos.
+ratatui = "ratatui"
+pitty = "pitty"
 
 [files]
 # Don't spellcheck lockfiles or build output.

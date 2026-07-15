@@ -45,10 +45,18 @@ coverage:
     cargo llvm-cov nextest --workspace --all-features --lcov --output-path lcov.info
     cargo llvm-cov report --lcov --output-path lcov.info
 
-# Supply-chain checks: cargo-deny and cargo-audit.
+# Supply-chain checks: cargo-deny, cargo-audit, and trivy.
 audit:
     cargo deny check
     cargo audit
+
+# Run Trivy security scan (vulns, secrets, misconfigs).
+trivy:
+    trivy fs --scanners vuln,secret,misconfig --severity CRITICAL,HIGH .
+
+# Run Kingfisher secret scanner.
+kingfisher:
+    kingfisher scan . --no-update-check
 
 # Spellcheck the tree.
 typos:
@@ -62,8 +70,8 @@ shear:
 clean:
     cargo clean
 
-# Run the same gates as CI: lint, test, audit, typos, shear.
-ci: lint test audit typos shear
+# Run the same gates as CI: lint, test, audit, typos, shear, trivy, kingfisher.
+ci: lint test audit typos shear trivy kingfisher
 
 # Install the binary locally from this checkout.
 install:

@@ -154,3 +154,36 @@ jobs:
         uses: rustsec/audit-check@v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  trivy:
+    name: Trivy scan
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          format: table
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+          trivy-config: trivy.yaml
+
+  kingfisher:
+    name: Kingfisher secret scan
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Kingfisher secret scanner
+        run: |
+          docker run --rm \
+            -v "$PWD":/src \
+            ghcr.io/mongodb/kingfisher:latest scan /src \
+            --config /src/kingfisher.yaml \
+            --no-update-check

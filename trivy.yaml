@@ -1,0 +1,37 @@
+# Trivy configuration for the `gor` project.
+# See https://trivy.dev/docs/latest/references/config-file/ for the full reference.
+
+# Fail on critical and high severity findings.
+severity:
+  - CRITICAL
+  - HIGH
+
+# Exit with code 1 when vulnerabilities are found.
+exit-code: 1
+
+# Scan for vulnerabilities, exposed secrets, and misconfigurations.
+scanners:
+  - vuln
+  - secret
+  - misconfig
+
+# Vulnerability scanner settings.
+vulnerability:
+  # Ignore unfixed vulnerabilities (no available patch).
+  ignore-unfixed: true
+
+# Secret scanner settings.
+secret:
+  # Enable secret scanning.
+  enable: true
+
+# Misconfiguration scanner settings.
+misconfiguration:
+  # Enable misconfiguration scanning.
+  enable: true
+  # Only scan for Terraform, Dockerfile, and Kubernetes misconfigs.
+  # Disable cloud-service-specific checks (AWS, GCP, Azure) since this is a CLI tool.
+  scanners:
+    - terraform
+    - dockerfile
+    - kubernetes

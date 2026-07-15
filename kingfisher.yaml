@@ -1,0 +1,25 @@
+# Kingfisher configuration for the `gor` project.
+# See https://mongodb.github.io/kingfisher/usage/configuration/ for the full reference.
+
+scan:
+  # Scan with high confidence to reduce false positives in CI.
+  confidence: high
+  # Redact secrets in output (safe for CI logs).
+  redact: true
+  # Skip scanning git history — only scan the current working tree.
+  # Git history scanning is better suited for scheduled/audit workflows.
+  git-history: none
+
+output:
+  # Human-readable table output for CI logs.
+  format: table
+
+filters:
+  # Exclude vendored, generated, and build artifacts.
+  exclude:
+    - "target/"
+    - ".git/"
+    - "**/node_modules/**"
+    - "*.lock"
+    - "*.min.js"
+    - ".pi-subagents/"

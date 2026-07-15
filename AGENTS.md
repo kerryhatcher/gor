@@ -160,7 +160,7 @@ ci: add windows to test matrix
 
 ## CI Pipeline
 
-CI runs on every push and PR. Six parallel jobs:
+CI runs on every push and PR. Eight parallel jobs:
 
 | Job | What it checks |
 |-----|---------------|
@@ -170,6 +170,8 @@ CI runs on every push and PR. Six parallel jobs:
 | `coverage` | llvm-cov + codecov upload |
 | `msrv` | cargo check with Rust 1.85 |
 | `security` | cargo-audit via rustsec |
+| `trivy` | vuln, secret, and misconfig scanning via Trivy |
+| `kingfisher` | secret scanning with live validation via Kingfisher |
 
 **If CI fails, fix it before pushing more commits.** Do not disable lint gates with `#[allow(...)]` without a documented reason.
 
