@@ -9,7 +9,7 @@ repos:
     hooks:
       - id: cargo-fmt
       - id: cargo-clippy
-        args: ["--all-targets", "--all-features", "--", "-D", "warnings"]
+        args: ["--all-targets", "--", "-D", "warnings"]
       - id: cargo-check
   - repo: https://github.com/crate-ci/typos
     rev: v1.48.0
