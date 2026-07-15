@@ -71,8 +71,6 @@ keyring = ["dep:keyring"]
 [dependencies]
 clap = { workspace = true }
 reqwest = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
 keyring = { workspace = true, optional = true }
 thiserror = { workspace = true }
 dirs = { workspace = true }
