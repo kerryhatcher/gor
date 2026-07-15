@@ -8,8 +8,8 @@ scan:
   redact: true
 
 output:
-  # Human-readable table output for CI logs.
-  format: table
+  # Human-readable output for CI logs.
+  format: pretty
 
 filters:
   # Exclude vendored, generated, and build artifacts.
