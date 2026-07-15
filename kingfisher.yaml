@@ -6,9 +6,6 @@ scan:
   confidence: high
   # Redact secrets in output (safe for CI logs).
   redact: true
-  # Skip scanning git history — only scan the current working tree.
-  # Git history scanning is better suited for scheduled/audit workflows.
-  git-history: none
 
 output:
   # Human-readable table output for CI logs.
@@ -23,3 +20,7 @@ filters:
     - "*.lock"
     - "*.min.js"
     - ".pi-subagents/"
+
+global:
+  # Skip the update check in CI.
+  no_update_check: true

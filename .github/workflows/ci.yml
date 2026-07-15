@@ -185,5 +185,4 @@ jobs:
           docker run --rm \
             -v "$PWD":/src \
             ghcr.io/mongodb/kingfisher:latest scan /src \
-            --config /src/kingfisher.yaml \
-            --no-update-check
+            --config /src/kingfisher.yaml
