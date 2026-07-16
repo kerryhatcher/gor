@@ -4,7 +4,7 @@ priority: P2
 phase: 4
 endpoints:
   - DELETE /user/gpg_keys/{key_id}
-status: todo
+status: done
 blockedBy: [gpg-key-list]
 blocks: []
 ---

@@ -45,6 +45,11 @@ pub fn run_gpg(cmd: GpgKeyCommand) -> anyhow::Result<()> {
             body,
             hostname,
         } => add_gpg_key(file.as_deref(), body.as_deref(), hostname.as_deref()),
+        GpgKeyCommand::Delete {
+            key_id,
+            yes,
+            hostname,
+        } => delete_gpg_key(&key_id, yes, hostname.as_deref()),
     }
 }
 
@@ -285,5 +290,48 @@ fn add_gpg_key(
     let result: serde_json::Value = response.json().context("failed to parse response")?;
     let key_id = result["key_id"].as_str().unwrap_or("—");
     println!("GPG key added: {key_id}");
+    Ok(())
+}
+
+/// Execute `gor gpg-key delete`.
+///
+/// Deletes a GPG public key from the authenticated user's account.
+///
+/// # Errors
+///
+/// Returns an error if the key does not exist or the API request fails.
+fn delete_gpg_key(key_id: &str, yes: bool, hostname: Option<&str>) -> anyhow::Result<()> {
+    if !yes {
+        use std::io::Write;
+        print!("Are you sure you want to delete GPG key '{key_id}'? [y/N] ");
+        std::io::stdout().flush().ok();
+
+        let mut input = String::new();
+        std::io::stdin()
+            .read_line(&mut input)
+            .context("failed to read input")?;
+        let input = input.trim().to_lowercase();
+        if input != "y" && input != "yes" {
+            println!("Cancelled.");
+            return Ok(());
+        }
+    }
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let path = format!("/user/gpg_keys/{key_id}");
+    let response = client
+        .request("DELETE", &path, &[], None)
+        .context("failed to delete GPG key")?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("delete failed");
+        anyhow::bail!("failed to delete GPG key '{key_id}': {msg}");
+    }
+
+    println!("GPG key '{key_id}' deleted.");
     Ok(())
 }
