@@ -12,6 +12,7 @@ use crate::repository::{detect_remote, parse_repo_spec};
 use anyhow::Context;
 use gix::bstr::ByteSlice;
 use std::collections::BTreeMap;
+use std::io::Write;
 
 /// Run the `gor pr` subcommand.
 ///
@@ -147,6 +148,19 @@ pub fn run(cmd: PrCommand) -> anyhow::Result<()> {
             delete_branch,
             admin,
             auto,
+            hostname.as_deref(),
+        ),
+        PrCommand::Checkout {
+            number,
+            repo,
+            branch,
+            recurse_submodules,
+            hostname,
+        } => pr_checkout(
+            number,
+            repo.as_deref(),
+            branch.as_deref(),
+            recurse_submodules,
             hostname.as_deref(),
         ),
     }
@@ -896,6 +910,151 @@ fn pr_merge(
         }
     }
 
+    Ok(())
+}
+
+/// Execute `gor pr checkout`.
+///
+/// Fetches and checks out a pull request's head branch locally.
+/// Adds the remote if not already present. Supports custom local branch
+/// names.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the PR does not exist,
+/// or the checkout fails.
+fn pr_checkout(
+    number: u64,
+    repo: Option<&str>,
+    branch: Option<&str>,
+    _recurse_submodules: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    // Resolve the repo spec
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Fetch PR details to get head branch info
+    let path = format!("/repos/{}/{}/pulls/{number}", spec.owner, spec.repo);
+    let response = client.get(&path).context("failed to fetch pull request")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("pull request #{number} not found in '{spec}'");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to fetch pull request #{number}: HTTP {status}");
+    }
+
+    let pr: serde_json::Value = response
+        .json()
+        .context("failed to parse pull request response")?;
+
+    let head_ref = pr["head"]["ref"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("could not determine head branch"))?;
+    let _head_sha = pr["head"]["sha"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("could not determine head SHA"))?;
+    let head_repo_full_name = pr["head"]["repo"]["full_name"].as_str();
+    let head_clone_url = pr["head"]["repo"]["clone_url"].as_str();
+
+    // Determine the local branch name
+    let local_branch = branch.unwrap_or(head_ref);
+
+    // Open the local git repo
+    let local_repo =
+        gix::discover(std::env::current_dir().context("failed to get current directory")?)
+            .context("failed to discover git repository")?;
+
+    // Determine the remote name to use
+    let remote_name = if head_repo_full_name.is_some()
+        && head_repo_full_name != Some(spec.to_string().as_str())
+    {
+        // PR is from a fork — use the fork owner as remote name
+        let fork_owner = head_repo_full_name
+            .and_then(|n| n.split('/').next())
+            .unwrap_or("fork");
+
+        // Check if the remote already exists
+        let remote_exists = local_repo.find_remote(fork_owner).is_ok();
+
+        if !remote_exists {
+            if let Some(clone_url) = head_clone_url {
+                eprintln!("Adding remote '{fork_owner}' -> {clone_url}");
+                let config_path = local_repo.git_dir().join("config");
+                let mut file = std::fs::OpenOptions::new()
+                    .append(true)
+                    .open(&config_path)
+                    .context("failed to open git config")?;
+                let url_escaped = clone_url.replace('"', "\\\"");
+                writeln!(
+                    file,
+                    "[remote \"{fork_owner}\"]\n\turl = {url_escaped}\n\tfetch = +refs/heads/*:refs/remotes/{fork_owner}/*"
+                )
+                .context("failed to write remote config")?;
+            }
+        }
+
+        fork_owner.to_string()
+    } else {
+        // PR is from the same repo — use origin
+        "origin".to_string()
+    };
+
+    // Fetch the PR head branch using gix
+    eprintln!("Fetching remote '{remote_name}' with branch '{head_ref}'...");
+
+    let workdir = local_repo
+        .workdir()
+        .ok_or_else(|| anyhow::anyhow!("bare repository cannot check out"))?;
+    let workdir_str = workdir.to_str().unwrap_or(".");
+
+    // Fetch the specific ref from the remote using system git
+    let fetch_status = std::process::Command::new("git")
+        .args([
+            "-C",
+            workdir_str,
+            "fetch",
+            &remote_name,
+            &format!("+refs/heads/{head_ref}:refs/remotes/{remote_name}/{head_ref}"),
+        ])
+        .status()
+        .context("failed to run git fetch")?;
+
+    if !fetch_status.success() {
+        anyhow::bail!("failed to fetch from remote '{remote_name}'");
+    }
+
+    // Create or update the local branch and check it out
+    eprintln!("Checking out '{local_branch}'...");
+
+    let checkout_status = std::process::Command::new("git")
+        .args([
+            "-C",
+            workdir_str,
+            "checkout",
+            "-B",
+            local_branch,
+            &format!("refs/remotes/{remote_name}/{head_ref}"),
+        ])
+        .status()
+        .context("failed to run git checkout")?;
+
+    if !checkout_status.success() {
+        anyhow::bail!("failed to checkout branch '{local_branch}'");
+    }
+
+    println!("Checked out PR #{number} as '{local_branch}'");
     Ok(())
 }
 
