@@ -6,6 +6,9 @@ endpoints:
   - POST https://github.com/login/device/code
   - POST https://github.com/login/oauth/access_token
   - GET /user
+status: in_progress
+blockedBy: []
+blocks: [auth-logout, auth-status, auth-setup-git, api-call, repo-view, repo-list, repo-clone, repo-create, gist-create, gist-list, search-repos, search-code, search-issues, search-commits, extension-install, extension-list, alias-set, alias-list, ssh-key-add, ssh-key-list, gpg-key-add, gpg-key-list, org-list, codespace-create, codespace-list, attestation-verify]
 ---
 
 # Auth Login
