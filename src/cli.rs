@@ -35,6 +35,9 @@ pub enum Command {
     /// Work with GitHub pull requests.
     #[command(subcommand)]
     Pr(PrCommand),
+    /// Work with GitHub issues.
+    #[command(subcommand)]
+    Issue(IssueCommand),
     /// Manage configuration values.
     #[command(subcommand)]
     Config(ConfigCommand),
@@ -140,6 +143,46 @@ pub enum PrCommand {
         /// Include the PR's comment thread.
         #[arg(long)]
         comments: bool,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+}
+
+/// Subcommands for `gor issue`.
+#[derive(Subcommand, Debug)]
+pub enum IssueCommand {
+    /// List issues in a repository.
+    List {
+        /// Repository to list issues for (OWNER/REPO format). Auto-detected from git remote if omitted.
+        owner_repo: Option<String>,
+        /// Filter by state: open, closed, or all (default: open).
+        #[arg(long, default_value = "open")]
+        state: String,
+        /// Filter by label (repeatable).
+        #[arg(long = "label")]
+        labels: Vec<String>,
+        /// Filter by assignee login.
+        #[arg(long)]
+        assignee: Option<String>,
+        /// Filter by issue author login.
+        #[arg(long)]
+        author: Option<String>,
+        /// Filter by @mention.
+        #[arg(long)]
+        mention: Option<String>,
+        /// Filter by milestone title or number.
+        #[arg(long)]
+        milestone: Option<String>,
+        /// Maximum number of issues to show (default: 30).
+        #[arg(short = 'L', long, default_value = "30")]
+        limit: u32,
+        /// Open the issue list in the default browser.
+        #[arg(short = 'w', long)]
+        web: bool,
         /// Output as JSON. Optionally specify comma-separated field names.
         #[arg(long, num_args = 0.., value_delimiter = ',')]
         json: Option<Vec<String>>,

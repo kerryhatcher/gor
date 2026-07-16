@@ -4,7 +4,7 @@ priority: P0
 phase: 0
 endpoints:
   - GET /repos/{owner}/{repo}/issues
-status: todo
+status: done
 blockedBy: [repo-view]
 blocks: [issue-view, issue-create]
 ---
@@ -34,6 +34,13 @@ to list issues with filtering
 11. `--web` / `-w` flag opens the issue list in the browser
 12. `--json` flag outputs as JSON with optional field selection
 13. `--hostname` flag targets a specific host
+
+## Implementation notes
+
+- Repo spec uses positional arg (consistent with `pr list`) rather than `--repo`/`-R` flag
+- GitHub Issues API uses `creator` param for `--author` and `mentioned` for `--mention`
+- Client-side filtering applied for author, labels, assignee, mention, and milestone
+- Table columns: NUMBER, TITLE, AUTHOR, LABELS, STATE
 
 ## Out of scope
 
