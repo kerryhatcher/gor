@@ -1669,6 +1669,9 @@ pub enum VariableCommand {
         /// Organization to list variables for.
         #[arg(long)]
         org: Option<String>,
+        /// Environment name for environment-scoped variables.
+        #[arg(short = 'e', long)]
+        env: Option<String>,
         /// Output as JSON. Optionally specify comma-separated field names.
         #[arg(long, num_args = 0.., value_delimiter = ',')]
         json: Option<Vec<String>>,
@@ -1689,6 +1692,9 @@ pub enum VariableCommand {
         /// Organization to set the variable for.
         #[arg(long)]
         org: Option<String>,
+        /// Environment name for environment-scoped variables.
+        #[arg(short = 'e', long)]
+        env: Option<String>,
         /// GitHub hostname for GitHub Enterprise Server (default: github.com).
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
@@ -1700,6 +1706,9 @@ pub enum VariableCommand {
         /// Delete at the organization level.
         #[arg(long)]
         org: Option<String>,
+        /// Environment name for environment-scoped variables.
+        #[arg(short = 'e', long)]
+        env: Option<String>,
         /// GitHub hostname for GitHub Enterprise Server (default: github.com).
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,

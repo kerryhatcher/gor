@@ -6,7 +6,7 @@ endpoints:
   - GET /repos/{owner}/{repo}/environments/{env}/variables
   - PATCH /repos/{owner}/{repo}/environments/{env}/variables/{name}
   - DELETE /repos/{owner}/{repo}/environments/{env}/variables/{name}
-status: todo
+status: done
 blockedBy: [variable-list, variable-set, variable-delete]
 blocks: []
 ---
