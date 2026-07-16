@@ -4,7 +4,7 @@ priority: P0
 phase: 0
 endpoints:
   - POST /repos/{owner}/{repo}/issues
-status: todo
+status: done
 blockedBy: [issue-list]
 blocks: []
 ---
