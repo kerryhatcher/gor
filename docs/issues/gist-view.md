@@ -4,7 +4,7 @@ priority: P2
 phase: 2
 endpoints:
   - GET /gists/{id}
-status: todo
+status: done
 blockedBy: [gist-list]
 blocks: [gist-edit, gist-delete]
 ---

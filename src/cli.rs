@@ -1179,6 +1179,26 @@ pub enum GistCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// View a gist's content and metadata.
+    View {
+        /// Gist ID to view.
+        gist_id: String,
+        /// Output the raw content of the gist.
+        #[arg(long)]
+        raw: bool,
+        /// Select a specific file to view.
+        #[arg(long)]
+        filename: Option<String>,
+        /// Open the gist in the browser.
+        #[arg(short = 'w', long)]
+        web: bool,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor search`.

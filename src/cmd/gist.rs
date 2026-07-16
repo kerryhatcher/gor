@@ -47,6 +47,21 @@ pub fn run(cmd: GistCommand) -> anyhow::Result<()> {
             web,
             hostname.as_deref(),
         ),
+        GistCommand::View {
+            gist_id,
+            raw,
+            filename,
+            web,
+            json,
+            hostname,
+        } => view(
+            &gist_id,
+            raw,
+            filename.as_deref(),
+            web,
+            json,
+            hostname.as_deref(),
+        ),
     }
 }
 
@@ -179,6 +194,97 @@ fn create(
     }
 
     println!("{gist_url}");
+    Ok(())
+}
+
+/// Execute `gor gist view`.
+///
+/// Views a gist's content and metadata.
+///
+/// # Errors
+///
+/// Returns an error if the API request fails.
+fn view(
+    gist_id: &str,
+    raw: bool,
+    filename: Option<&str>,
+    web: bool,
+    json: Option<Vec<String>>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let path = format!("/gists/{gist_id}");
+    let response = client.get(&path).context("failed to fetch gist")?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("view failed");
+        anyhow::bail!("failed to view gist: {msg}");
+    }
+
+    let gist: serde_json::Value = response.json().context("failed to parse gist response")?;
+
+    // --web / -w: open in browser
+    if web {
+        if let Some(url) = gist["html_url"].as_str() {
+            open_in_browser(url);
+            return Ok(());
+        }
+    }
+
+    // --raw: output raw content of a specific file
+    if raw {
+        let files = gist["files"]
+            .as_object()
+            .ok_or_else(|| anyhow::anyhow!("gist has no files"))?;
+
+        let selected = if let Some(name) = filename {
+            files
+                .get(name)
+                .ok_or_else(|| anyhow::anyhow!("file '{name}' not found in gist"))?
+        } else {
+            files
+                .values()
+                .next()
+                .ok_or_else(|| anyhow::anyhow!("gist has no files"))?
+        };
+
+        let content = selected["content"].as_str().unwrap_or("");
+        print!("{content}");
+        return Ok(());
+    }
+
+    // --json: output as JSON
+    if let Some(fields) = json {
+        let fields_ref: Option<&[String]> = if fields.is_empty() {
+            None
+        } else {
+            Some(&fields)
+        };
+        print_json(&gist, fields_ref);
+        return Ok(());
+    }
+
+    // Default: print description and files
+    let description = gist["description"].as_str().unwrap_or("No description");
+    println!("Description: {description}");
+    println!("Files:");
+
+    let files = gist["files"]
+        .as_object()
+        .ok_or_else(|| anyhow::anyhow!("gist has no files"))?;
+    for (name, file_info) in files {
+        let language = file_info["language"].as_str().unwrap_or("Unknown");
+        let content = file_info["content"].as_str().unwrap_or("");
+        println!("\n  {name} ({language}):");
+        for line in content.lines() {
+            println!("    {line}");
+        }
+    }
+
     Ok(())
 }
 
