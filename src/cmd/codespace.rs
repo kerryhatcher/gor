@@ -75,6 +75,11 @@ pub fn run(cmd: CodespaceCommand) -> anyhow::Result<()> {
             json,
             hostname,
         } => ports(&name, json, hostname.as_deref()),
+        CodespaceCommand::Rebuild {
+            name,
+            yes,
+            hostname,
+        } => rebuild(&name, yes, hostname.as_deref()),
     }
 }
 
@@ -542,6 +547,48 @@ fn ports(name: &str, json: Option<Vec<String>>, hostname: Option<&str>) -> anyho
         println!("{label_truncated:<24}  {source_port:<12}  {visibility:<12}");
     }
 
+    Ok(())
+}
+
+/// Rebuild a codespace from its devcontainer configuration.
+///
+/// # Errors
+///
+/// Returns an error if the codespace is not running, the user cancels,
+/// or the API request fails.
+fn rebuild(name: &str, yes: bool, hostname: Option<&str>) -> anyhow::Result<()> {
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    if !yes {
+        use std::io::Write;
+        print!("Are you sure you want to rebuild codespace '{name}'? [y/N] ");
+        std::io::stdout().flush().ok();
+
+        let mut input = String::new();
+        std::io::stdin()
+            .read_line(&mut input)
+            .context("failed to read input")?;
+        let input = input.trim().to_lowercase();
+        if input != "y" && input != "yes" {
+            println!("Cancelled.");
+            return Ok(());
+        }
+    }
+
+    let path = format!("/user/codespaces/{name}/rebuild");
+    let response = client
+        .request("POST", &path, &[], None)
+        .context("failed to trigger rebuild")?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("rebuild failed");
+        anyhow::bail!("failed to rebuild codespace '{name}': {msg}");
+    }
+
+    println!("Codespace '{name}' rebuild started.");
     Ok(())
 }
 

@@ -1975,6 +1975,17 @@ pub enum CodespaceCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Rebuild a codespace from its devcontainer configuration.
+    Rebuild {
+        /// Codespace name.
+        name: String,
+        /// Skip confirmation prompt.
+        #[arg(short = 'y', long)]
+        yes: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor alias`.
