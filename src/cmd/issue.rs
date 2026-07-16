@@ -7,7 +7,7 @@
 
 use crate::cli::IssueCommand;
 use crate::client::Client;
-use crate::output::print_json;
+use crate::output::{format_date, print_json};
 use crate::repository::{detect_remote, parse_repo_spec};
 use anyhow::Context;
 
@@ -40,6 +40,21 @@ pub fn run(cmd: IssueCommand) -> anyhow::Result<()> {
             milestone.as_deref(),
             limit,
             web,
+            json,
+            hostname.as_deref(),
+        ),
+        IssueCommand::View {
+            number,
+            repo,
+            web,
+            comments,
+            json,
+            hostname,
+        } => view(
+            number,
+            repo.as_deref(),
+            web,
+            comments,
             json,
             hostname.as_deref(),
         ),
@@ -195,6 +210,184 @@ fn list(
     // Default: print formatted table
     print_issue_table(&issues);
     Ok(())
+}
+
+/// Execute `gor issue view`.
+///
+/// Displays the full details of a single issue, including title, body,
+/// author, state, labels, assignees, milestone, and optionally comments.
+/// Supports JSON output and opening the issue in a browser.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the issue does not
+/// exist, or the API request fails.
+#[allow(clippy::too_many_arguments)]
+fn view(
+    number: u64,
+    repo: Option<&str>,
+    web: bool,
+    comments: bool,
+    json: Option<Vec<String>>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    // Resolve the repo spec
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+
+    // Handle --web flag: open in browser
+    if web {
+        let web_url = format!(
+            "https://{host}/{}/{}/issues/{number}",
+            spec.owner, spec.repo
+        );
+        open_in_browser(&web_url);
+        return Ok(());
+    }
+
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Fetch the issue details
+    let path = format!("/repos/{}/{}/issues/{number}", spec.owner, spec.repo);
+    let response = client.get(&path).context("failed to fetch issue")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("issue #{number} not found in '{spec}'");
+    }
+    if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+        anyhow::bail!("authentication required to view issue #{number}");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to view issue #{number}: HTTP {status}");
+    }
+
+    let issue: serde_json::Value = response.json().context("failed to parse issue response")?;
+
+    // Handle --json flag
+    if let Some(fields) = json {
+        let fields_ref: Option<&[String]> = if fields.is_empty() {
+            None
+        } else {
+            Some(&fields)
+        };
+        print_json(&issue, fields_ref);
+        return Ok(());
+    }
+
+    // Fetch comments if --comments flag is set
+    let comments_data = if comments {
+        let comments_path = format!(
+            "/repos/{}/{}/issues/{number}/comments",
+            spec.owner, spec.repo
+        );
+        client
+            .get(&comments_path)
+            .ok()
+            .and_then(|r| r.json().ok())
+            .unwrap_or_default()
+    } else {
+        Vec::<serde_json::Value>::new()
+    };
+
+    // Print formatted view
+    print_issue_view(&issue, &comments_data);
+    Ok(())
+}
+
+/// Print a formatted issue detail view.
+///
+/// Displays title, metadata (state, author, dates, labels, assignees,
+/// milestone), body, and optionally comments.
+fn print_issue_view(issue: &serde_json::Value, comments: &[serde_json::Value]) {
+    // Title
+    let title = issue["title"].as_str().unwrap_or("(no title)");
+    println!("{title}");
+    let separator_len = title.len().min(80);
+    println!("{}", "─".repeat(separator_len));
+    println!();
+
+    // Metadata
+    let state = issue["state"].as_str().unwrap_or("unknown");
+    let author = issue["user"]["login"].as_str().unwrap_or("unknown");
+    let created = issue["created_at"]
+        .as_str()
+        .map_or_else(|| "—".to_string(), format_date);
+    let updated = issue["updated_at"]
+        .as_str()
+        .map_or_else(|| "—".to_string(), format_date);
+
+    println!("State:   {state}");
+    println!("Author:  {author}");
+    println!("Created: {created}");
+    println!("Updated: {updated}");
+
+    // Labels
+    let labels_str = issue["labels"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|l| l["name"].as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
+    if !labels_str.is_empty() {
+        println!("Labels:  {labels_str}");
+    }
+
+    // Assignees
+    let assignees_str = issue["assignees"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|a| a["login"].as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
+    if !assignees_str.is_empty() {
+        println!("Assignees: {assignees_str}");
+    }
+
+    // Milestone
+    if let Some(milestone_title) = issue["milestone"]["title"].as_str() {
+        println!("Milestone: {milestone_title}");
+    }
+
+    println!();
+
+    // Body
+    let body = issue["body"].as_str().unwrap_or("");
+    if !body.is_empty() {
+        println!("{body}");
+        println!();
+    }
+
+    // Comments
+    if !comments.is_empty() {
+        println!("── Comments ──");
+        println!();
+        for comment in comments {
+            let comment_author = comment["user"]["login"].as_str().unwrap_or("unknown");
+            let comment_date = comment["created_at"]
+                .as_str()
+                .map_or_else(|| "—".to_string(), format_date);
+            let comment_body = comment["body"].as_str().unwrap_or("");
+            println!("{comment_author} commented on {comment_date}");
+            println!();
+            println!("{comment_body}");
+            println!();
+        }
+    }
 }
 
 /// Print a formatted issue list table.
@@ -355,5 +548,139 @@ mod tests {
     fn open_in_browser_does_not_panic() {
         // Just verify it doesn't panic — actual browser opening is a no-op in tests
         open_in_browser("https://github.com/octocat/hello-world/issues");
+    }
+
+    #[test]
+    fn print_issue_view_basic() {
+        let issue = json!({
+            "number": 42,
+            "title": "Fix authentication bug",
+            "state": "open",
+            "user": { "login": "octocat" },
+            "created_at": "2024-01-15T10:30:00Z",
+            "updated_at": "2024-01-16T12:00:00Z",
+            "body": "This issue describes an authentication bug.",
+            "labels": [
+                { "name": "bug" },
+                { "name": "security" }
+            ],
+            "assignees": [
+                { "login": "alice" }
+            ],
+            "milestone": { "title": "v1.0" }
+        });
+        let comments: Vec<serde_json::Value> = vec![];
+        // Should not panic
+        print_issue_view(&issue, &comments);
+    }
+
+    #[test]
+    fn print_issue_view_closed() {
+        let issue = json!({
+            "number": 100,
+            "title": "Add new feature",
+            "state": "closed",
+            "user": { "login": "dev-user" },
+            "created_at": "2024-01-10T08:00:00Z",
+            "updated_at": "2024-01-15T10:30:00Z",
+            "body": "This adds a new feature.",
+            "labels": [],
+            "assignees": [],
+            "milestone": null
+        });
+        let comments: Vec<serde_json::Value> = vec![];
+        // Should not panic
+        print_issue_view(&issue, &comments);
+    }
+
+    #[test]
+    fn print_issue_view_with_comments() {
+        let issue = json!({
+            "number": 42,
+            "title": "Fix bug",
+            "state": "open",
+            "user": { "login": "octocat" },
+            "created_at": "2024-01-15T10:30:00Z",
+            "updated_at": "2024-01-16T12:00:00Z",
+            "body": "Fixes a bug.",
+            "labels": [],
+            "assignees": [],
+            "milestone": null
+        });
+        let comments = vec![
+            json!({
+                "user": { "login": "reviewer1" },
+                "created_at": "2024-01-16T14:00:00Z",
+                "body": "Looks good to me!"
+            }),
+            json!({
+                "user": { "login": "octocat" },
+                "created_at": "2024-01-16T15:00:00Z",
+                "body": "Thanks for the review!"
+            }),
+        ];
+        // Should not panic
+        print_issue_view(&issue, &comments);
+    }
+
+    #[test]
+    fn print_issue_view_null_fields() {
+        let issue = json!({
+            "number": 99,
+            "title": null,
+            "state": null,
+            "user": null,
+            "created_at": null,
+            "updated_at": null,
+            "body": null,
+            "labels": null,
+            "assignees": null,
+            "milestone": null
+        });
+        let comments: Vec<serde_json::Value> = vec![];
+        // Should not panic with null fields
+        print_issue_view(&issue, &comments);
+    }
+
+    #[test]
+    fn print_issue_view_with_assignees() {
+        let issue = json!({
+            "number": 50,
+            "title": "Multiple assignees",
+            "state": "open",
+            "user": { "login": "owner" },
+            "created_at": "2024-02-01T10:00:00Z",
+            "updated_at": "2024-02-02T10:00:00Z",
+            "body": "This issue has multiple assignees.",
+            "labels": [],
+            "assignees": [
+                { "login": "alice" },
+                { "login": "bob" },
+                { "login": "carol" }
+            ],
+            "milestone": null
+        });
+        let comments: Vec<serde_json::Value> = vec![];
+        // Should not panic
+        print_issue_view(&issue, &comments);
+    }
+
+    #[test]
+    fn print_issue_view_with_milestone() {
+        let issue = json!({
+            "number": 60,
+            "title": "Milestone issue",
+            "state": "open",
+            "user": { "login": "planner" },
+            "created_at": "2024-03-01T10:00:00Z",
+            "updated_at": "2024-03-02T10:00:00Z",
+            "body": "This issue is part of a milestone.",
+            "labels": [{"name": "enhancement"}],
+            "assignees": [],
+            "milestone": { "title": "v2.0" }
+        });
+        let comments: Vec<serde_json::Value> = vec![];
+        // Should not panic
+        print_issue_view(&issue, &comments);
     }
 }

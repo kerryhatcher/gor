@@ -190,6 +190,26 @@ pub enum IssueCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// View details of an issue.
+    View {
+        /// Issue number.
+        number: u64,
+        /// Repository to view issue from (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Open the issue in the default browser.
+        #[arg(short = 'w', long)]
+        web: bool,
+        /// Include the issue's comment thread.
+        #[arg(long)]
+        comments: bool,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor config`.
