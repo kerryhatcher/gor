@@ -62,6 +62,20 @@ pub fn run(cmd: GistCommand) -> anyhow::Result<()> {
             json,
             hostname.as_deref(),
         ),
+        GistCommand::Edit {
+            gist_id,
+            desc,
+            add,
+            filename,
+            hostname,
+        } => edit(
+            &gist_id,
+            desc.as_deref(),
+            &add,
+            filename.as_deref(),
+            hostname.as_deref(),
+        ),
+        GistCommand::Delete { gist_id, hostname } => delete(&gist_id, hostname.as_deref()),
     }
 }
 
@@ -285,6 +299,115 @@ fn view(
         }
     }
 
+    Ok(())
+}
+
+/// Execute `gor gist edit`.
+///
+/// Edits an existing gist by updating its description, adding files, or renaming files.
+///
+/// # Errors
+///
+/// Returns an error if the API request fails.
+fn edit(
+    gist_id: &str,
+    desc: Option<&str>,
+    add: &[String],
+    filename: Option<&str>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let mut body_map = serde_json::Map::new();
+
+    if let Some(d) = desc {
+        body_map.insert(
+            "description".to_string(),
+            serde_json::Value::String(d.to_string()),
+        );
+    }
+
+    // Handle --add: add files from file paths or inline content
+    if !add.is_empty() {
+        let mut files_map = serde_json::Map::new();
+        for entry in add {
+            if let Some((key, value)) = entry.split_once('=') {
+                // If the value looks like a file path, read it
+                let content = fs::read_to_string(value).unwrap_or_else(|_| value.to_string());
+                files_map.insert(key.to_string(), serde_json::json!({"content": content}));
+            } else {
+                let content = fs::read_to_string(entry)
+                    .with_context(|| format!("failed to read file: {entry}"))?;
+                files_map.insert(entry.clone(), serde_json::json!({"content": content}));
+            }
+        }
+        body_map.insert("files".to_string(), serde_json::Value::Object(files_map));
+    }
+
+    // Handle --filename: rename a file (old:new)
+    if let Some(fn_rename) = filename {
+        if let Some((old_name, new_name)) = fn_rename.split_once(':') {
+            let mut files_map = serde_json::Map::new();
+            let mut new_file_map = serde_json::Map::new();
+            new_file_map.insert(
+                "filename".to_string(),
+                serde_json::Value::String(new_name.to_string()),
+            );
+            files_map.insert(
+                old_name.to_string(),
+                serde_json::Value::Object(new_file_map),
+            );
+            body_map.insert("files".to_string(), serde_json::Value::Object(files_map));
+        } else {
+            anyhow::bail!("invalid rename format: '{fn_rename}' (expected old:new)");
+        }
+    }
+
+    let body_value = serde_json::Value::Object(body_map);
+    let body_bytes = serde_json::to_vec(&body_value).context("failed to serialize body")?;
+    let path = format!("/gists/{gist_id}");
+    let response = client
+        .request("PATCH", &path, &[], Some(body_bytes))
+        .context("failed to edit gist")?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("edit failed");
+        anyhow::bail!("failed to edit gist: {msg}");
+    }
+
+    let gist: serde_json::Value = response.json().context("failed to parse gist response")?;
+    let gist_url = gist["html_url"].as_str().unwrap_or("");
+    println!("{gist_url}");
+    Ok(())
+}
+
+/// Execute `gor gist delete`.
+///
+/// Deletes a gist by ID.
+///
+/// # Errors
+///
+/// Returns an error if the API request fails.
+fn delete(gist_id: &str, hostname: Option<&str>) -> anyhow::Result<()> {
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let path = format!("/gists/{gist_id}");
+    let response = client
+        .request("DELETE", &path, &[], None)
+        .context("failed to delete gist")?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("delete failed");
+        anyhow::bail!("failed to delete gist: {msg}");
+    }
+
+    println!("Gist '{gist_id}' deleted.");
     Ok(())
 }
 

@@ -1199,6 +1199,31 @@ pub enum GistCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Edit a gist.
+    Edit {
+        /// Gist ID to edit.
+        gist_id: String,
+        /// New description for the gist.
+        #[arg(long)]
+        desc: Option<String>,
+        /// Add a file to the gist (path=content or file path).
+        #[arg(long)]
+        add: Vec<String>,
+        /// Rename a file (old:new).
+        #[arg(long)]
+        filename: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Delete a gist.
+    Delete {
+        /// Gist ID to delete.
+        gist_id: String,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor search`.
