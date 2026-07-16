@@ -4,7 +4,7 @@ priority: P2
 phase: 4
 endpoints:
   - POST /repos/{owner}/{repo}/issues/{number}/transfer
-status: todo
+status: done
 blockedBy: [issue-view]
 blocks: []
 ---

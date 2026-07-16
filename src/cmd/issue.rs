@@ -141,6 +141,12 @@ pub fn run(cmd: IssueCommand) -> anyhow::Result<()> {
             milestone.as_deref(),
             hostname.as_deref(),
         ),
+        IssueCommand::Transfer {
+            number,
+            destination,
+            repo,
+            hostname,
+        } => transfer(number, &destination, repo.as_deref(), hostname.as_deref()),
     }
 }
 
@@ -885,6 +891,61 @@ fn edit(
         "https://github.com/{}/{}/issues/{issue_number}",
         spec.owner, spec.repo
     );
+    Ok(())
+}
+
+/// Execute `gor issue transfer`.
+///
+/// Transfers an issue to a different repository.
+///
+/// # Errors
+///
+/// Returns an error if the source repo cannot be determined, the API request
+/// fails, or the destination repo does not exist.
+fn transfer(
+    number: u64,
+    destination: &str,
+    repo: Option<&str>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Determine the source repository.
+    let spec = if let Some(r) = repo {
+        parse_repo_spec(r).with_context(|| format!("invalid repository: {r}"))?
+    } else {
+        detect_remote().context("could not detect repository from git remote")?
+    };
+
+    // Parse the destination repository.
+    let dest_spec = parse_repo_spec(destination)
+        .with_context(|| format!("invalid destination repository: {destination}"))?;
+
+    let path = format!(
+        "/repos/{}/{}/issues/{number}/transfer",
+        spec.owner, spec.repo
+    );
+
+    let body = serde_json::json!({
+        "new_owner": dest_spec.owner,
+        "new_repo": dest_spec.repo,
+    });
+
+    let response = client
+        .post(&path, &body)
+        .context("failed to transfer issue")?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("transfer failed");
+        anyhow::bail!("failed to transfer issue #{number}: {msg}");
+    }
+
+    let result: serde_json::Value = response.json().context("failed to parse response")?;
+    let new_url = result["html_url"].as_str().unwrap_or("—");
+    println!("Issue #{number} transferred to {destination}: {new_url}");
     Ok(())
 }
 

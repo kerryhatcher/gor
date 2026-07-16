@@ -887,6 +887,19 @@ pub enum IssueCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Transfer an issue to another repository.
+    Transfer {
+        /// Issue number.
+        number: u64,
+        /// Destination repository (OWNER/REPO format).
+        destination: String,
+        /// Source repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor config`.
