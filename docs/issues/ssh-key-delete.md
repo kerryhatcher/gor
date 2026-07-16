@@ -4,7 +4,7 @@ priority: P2
 phase: 4
 endpoints:
   - DELETE /user/keys/{key_id}
-status: todo
+status: done
 blockedBy: [ssh-key-list]
 blocks: []
 ---

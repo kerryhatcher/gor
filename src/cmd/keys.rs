@@ -29,6 +29,11 @@ pub fn run_ssh(cmd: SshKeyCommand) -> anyhow::Result<()> {
             body.as_deref(),
             hostname.as_deref(),
         ),
+        SshKeyCommand::Delete {
+            key_id,
+            yes,
+            hostname,
+        } => delete_ssh_key(&key_id, yes, hostname.as_deref()),
     }
 }
 
@@ -173,6 +178,49 @@ fn add_ssh_key(
     let result: serde_json::Value = response.json().context("failed to parse response")?;
     let key_id = result["id"].as_u64().unwrap_or(0);
     println!("SSH key added: {key_id} ({title})");
+    Ok(())
+}
+
+/// Execute `gor ssh-key delete`.
+///
+/// Deletes an SSH public key from the authenticated user's account.
+///
+/// # Errors
+///
+/// Returns an error if the key does not exist or the API request fails.
+fn delete_ssh_key(key_id: &str, yes: bool, hostname: Option<&str>) -> anyhow::Result<()> {
+    if !yes {
+        use std::io::Write;
+        print!("Are you sure you want to delete SSH key '{key_id}'? [y/N] ");
+        std::io::stdout().flush().ok();
+
+        let mut input = String::new();
+        std::io::stdin()
+            .read_line(&mut input)
+            .context("failed to read input")?;
+        let input = input.trim().to_lowercase();
+        if input != "y" && input != "yes" {
+            println!("Cancelled.");
+            return Ok(());
+        }
+    }
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let path = format!("/user/keys/{key_id}");
+    let response = client
+        .request("DELETE", &path, &[], None)
+        .context("failed to delete SSH key")?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("delete failed");
+        anyhow::bail!("failed to delete SSH key '{key_id}': {msg}");
+    }
+
+    println!("SSH key '{key_id}' deleted.");
     Ok(())
 }
 

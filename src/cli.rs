@@ -1557,6 +1557,17 @@ pub enum SshKeyCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Delete an SSH key.
+    Delete {
+        /// SSH key database ID to delete.
+        key_id: String,
+        /// Skip confirmation prompt.
+        #[arg(short = 'y', long)]
+        yes: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor gpg-key`.
