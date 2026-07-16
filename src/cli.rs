@@ -29,14 +29,31 @@ pub enum Command {
     /// Authenticate with a GitHub account.
     #[command(subcommand)]
     Auth(AuthCommand),
-    /// View a repository.
-    Repo {
-        /// Repository to view (OWNER/REPO format).
-        owner_repo: String,
-    },
+    /// Work with GitHub repositories.
+    #[command(subcommand)]
+    Repo(RepoCommand),
     /// Manage configuration values.
     #[command(subcommand)]
     Config(ConfigCommand),
+}
+
+/// Subcommands for `gor repo`.
+#[derive(Subcommand, Debug)]
+pub enum RepoCommand {
+    /// View a repository's description, stats, and metadata.
+    View {
+        /// Repository to view (OWNER/REPO format). Auto-detected from git remote if omitted.
+        owner_repo: Option<String>,
+        /// Open the repository in the default browser.
+        #[arg(short = 'w', long)]
+        web: bool,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor auth`.

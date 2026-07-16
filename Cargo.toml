@@ -75,6 +75,7 @@ keyring = ["dep:keyring"]
 clap = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 serde_yaml_ng = { workspace = true }
 keyring = { workspace = true, optional = true }
 thiserror = { workspace = true }

@@ -5,6 +5,7 @@
 
 pub mod auth;
 pub mod config;
+pub mod repo;
 pub mod util;
 
 use crate::cli::{Args, Command};
@@ -18,12 +19,7 @@ use crate::cli::{Args, Command};
 pub fn dispatch(args: Args) -> anyhow::Result<()> {
     match args.command {
         Command::Auth(cmd) => auth::run(cmd),
-        Command::Repo { owner_repo } => {
-            tracing::info!("Viewing repository: {owner_repo}");
-            println!("Repository: {owner_repo}");
-            println!("This command is not yet implemented.");
-            Ok(())
-        }
+        Command::Repo(cmd) => repo::run(cmd),
         Command::Config(cmd) => config::run(cmd, args.hostname.as_deref()),
     }
 }

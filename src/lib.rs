@@ -36,6 +36,8 @@ pub mod config;
 pub mod error;
 pub mod host;
 pub mod keyring_store;
+pub mod output;
+pub mod repository;
 
 use clap::Parser;
 use cli::Args;
