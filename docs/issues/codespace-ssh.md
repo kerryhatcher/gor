@@ -1,33 +1,32 @@
 ---
-tags: [codespace, read]
-priority: P3
+tags: [codespace, write]
+priority: P2
 phase: 4
 endpoints:
-  - GET /user/codespaces/{codespace_name}
+  - GET /user/codespaces/{codespace_name}/ssh
 ---
 
 # Codespace SSH
 
 ## As a
 
-developer who wants to work in a codespace from their local terminal
+developer who wants a shell in my cloud dev environment
 
 ## I want
 
-to open an SSH session into a codespace
+to open an SSH session into a GitHub Codespace
 
 ## Acceptance criteria
 
-1. Running `gor codespace ssh my-codespace` opens an SSH connection to the named codespace
-2. The SSH connection uses the codespace's `remote_user` and `ssh_url`
-3. `--profile` flag selects a named SSH config profile
-4. `--config` flag prints the SSH connection config instead of connecting
-5. `--repo` / `-R` flag resolves the codespace by repository
-6. `--debug` / `-d` flag enables debug logging for the SSH connection
-7. Only available on github.com — a clear error is shown when used on GHES
-8. Exit code reflects the SSH session exit code
+1. Running `gor codespace ssh <name>` opens an interactive SSH session to the named codespace
+2. The SSH connection details (host, port, user, private key) are fetched from `GET /user/codespaces/{name}/ssh`
+3. A temporary SSH key is registered with the codespace for the session
+4. `--repo` flag scopes selection when only a partial name is given
+5. `--profile` flag selects an SSH config profile
+6. `--config` flag prints the SSH connection config instead of connecting
+7. Codespaces are only available on github.com
 
 ## Out of scope
 
-- File transfer to/from the codespace (use `scp` with `--config` output)
-- Port forwarding setup
+- File transfer over SSH (use `gor codespace cp`)
+- Port forwarding configuration

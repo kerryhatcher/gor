@@ -1,6 +1,6 @@
 ---
 tags: [variable, read]
-priority: P3
+priority: P2
 phase: 3
 endpoints:
   - GET /repos/{owner}/{repo}/actions/variables
@@ -11,24 +11,22 @@ endpoints:
 
 ## As a
 
-developer managing CI/CD configuration
+developer inspecting CI configuration
 
 ## I want
 
-to list repository or organization variables
+to list the Actions variables defined for a repository or organization
 
 ## Acceptance criteria
 
 1. Running `gor variable list` in a repo directory lists repository variables
-2. Each row shows: variable name, value
-3. `--repo` / `-R` flag specifies the repository explicitly
-4. `--org` flag lists organization-level variables
-5. `--hostname` flag targets a specific host
-6. `--json` flag outputs as JSON with optional field selection
-7. Secret values are never shown for sensitive variables
-8. Exit code 0 on success
+2. `--org` flag lists organization variables
+3. Each row shows: variable name and (for org vars) visibility/selected-repo scope
+4. `--limit` / `-L` flag caps results (default: 30)
+5. `--json` flag outputs as JSON with optional field selection
+6. `--hostname` flag targets a specific host
 
 ## Out of scope
 
+- Showing variable values in plaintext (names only, like the API)
 - Setting or deleting variables (separate stories)
-- Viewing environment-scoped variables

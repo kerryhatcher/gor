@@ -1,6 +1,6 @@
 ---
 tags: [ssh-key, write]
-priority: P3
+priority: P2
 phase: 3
 endpoints:
   - POST /user/keys
@@ -10,23 +10,23 @@ endpoints:
 
 ## As a
 
-developer who wants to authenticate git operations via SSH
+developer who wants to authenticate git operations with a new key
 
 ## I want
 
-to add a new SSH public key to my account
+to add an SSH public key to my GitHub account
 
 ## Acceptance criteria
 
-1. Running `gor ssh-key add "ssh-ed25519 AAAA... user@host"` adds the given public key
-2. `--title` flag sets a friendly name for the key (required)
-3. `--type` flag sets the key type (`authentication` or `signing`, default: `authentication`)
-4. The key body may also be read from a file path argument instead of inline
+1. Running `gor ssh-key add --title "laptop" -f ~/.ssh/id_ed25519.pub` adds the key
+2. `--title` / `-t` flag sets the human-readable key title (required)
+3. `--file` / `-f` flag reads the public key from a file
+4. `--body` / `-b` flag provides the public key inline (alternative to `--file`)
 5. `--hostname` flag targets a specific host
-6. A confirmation message with the key ID is printed on success
-7. Exit code 0 on success
+6. The created key's ID and title are printed on success
+7. A missing or malformed key fails with a clear error and non-zero exit code
 
 ## Out of scope
 
-- Generating SSH key pairs (use `ssh-keygen`)
-- Deleting keys (separate story)
+- Uploading private keys (never sent to GitHub)
+- Associating keys with specific repositories

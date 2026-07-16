@@ -1,34 +1,33 @@
 ---
 tags: [attestation, read]
-priority: P4
+priority: P2
 phase: 4
 endpoints:
-  - GET /repos/{owner}/{repo}/attestations/{subject_digest}
+  - GET /repos/{owner}/{repo}/attestations
 ---
 
 # Attestation Verify
 
 ## As a
 
-developer who needs to verify supply-chain provenance
+developer who wants to verify build provenance of artifacts
 
 ## I want
 
-to verify signed attestations for a build artifact
+to verify a GitHub artifact attestation against a digest or OCI image
 
 ## Acceptance criteria
 
-1. Running `gor attestation verify <artifact-path> --owner myorg` verifies attestations for the given artifact
-2. The artifact can be a local file or OCI image reference
-3. `--owner` / `-o` flag specifies the expected attestation signer (GitHub org/user)
-4. `--repo` / `-R` flag scopes verification to a specific repository
-5. `--bundle` flag provides an in-toto bundle file instead of fetching from the API
-6. Verification checks the signature against the trusted root
-7. A clear PASS/FAIL result is printed with details on failure
+1. Running `gor attestation verify <file> --owner myorg` verifies the attestation for `<file>`
+2. `--owner` flag sets the expected artifact owner/organization
+3. `--repo` flag scopes verification to a specific repository
+4. `--bundle` flag supplies a local Sigstore bundle file instead of fetching from the API
+5. Verification checks the signing certificate, signature, and subject digest
+6. The command exits 0 only when the attestation is valid and the subject matches
+7. A clear success or failure message is printed
 8. `--hostname` flag targets a specific host
-9. Exit code 0 on success, non-zero on verification failure
 
 ## Out of scope
 
-- Generating attestations (done by GitHub Actions during builds)
-- Storing attestions locally
+- Generating attestations (done at build time by GitHub Actions)
+- Downloading the trusted root (separate story)

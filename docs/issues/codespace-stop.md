@@ -1,6 +1,6 @@
 ---
 tags: [codespace, write]
-priority: P3
+priority: P2
 phase: 4
 endpoints:
   - POST /user/codespaces/{codespace_name}/stop
@@ -10,22 +10,22 @@ endpoints:
 
 ## As a
 
-developer who wants to pause a codespace to save costs
+developer who is done working in a cloud dev environment
 
 ## I want
 
-to stop a running codespace
+to stop a running GitHub Codespace to avoid billing
 
 ## Acceptance criteria
 
-1. Running `gor codespace stop my-codespace` stops the named codespace
-2. `--repo` / `-R` flag resolves the codespace by repository
-3. Multiple codespace names may be passed to stop several at once
-4. A confirmation message is printed on success
-5. Only available on github.com — a clear error is shown when used on GHES
-6. Exit code 0 on success
+1. Running `gor codespace stop <name>` stops the named codespace
+2. The stop request is sent to `POST /user/codespaces/{name}/stop`
+3. `--repo` flag scopes selection when only a partial name is given
+4. `--all` flag stops every codespace owned by the user
+5. A confirmation message is printed on success
+6. Codespaces are only available on github.com
 
 ## Out of scope
 
-- Deleting the codespace (separate story)
-- Stopping all codespaces at once (pass multiple names)
+- Deleting the codespace (use `gor codespace delete`)
+- Restarting a stopped codespace

@@ -1,36 +1,36 @@
 ---
 tags: [variable, write]
-priority: P3
+priority: P2
 phase: 3
 endpoints:
   - POST /repos/{owner}/{repo}/actions/variables
-  - PUT /repos/{owner}/{repo}/actions/variables/{name}
   - POST /orgs/{org}/actions/variables
-  - PUT /orgs/{org}/actions/variables/{name}
+  - PATCH /repos/{owner}/{repo}/actions/variables/{name}
+  - PATCH /orgs/{org}/actions/variables/{name}
 ---
 
 # Variable Set
 
 ## As a
 
-developer automating CI/CD pipelines
+developer who needs to add or update a CI variable
 
 ## I want
 
-to create or update a repository or organization variable
+to set an Actions variable for a repository or organization
 
 ## Acceptance criteria
 
-1. Running `gor variable set NAME value` creates or updates variable `NAME`
-2. `--repo` / `-R` flag specifies the repository explicitly
-3. `--org` flag sets an organization-level variable
-4. `--visibility` flag sets visibility (`all`, `private`, or `selected`)
-5. `--repos` flag scopes visibility to specific repositories (comma-separated)
-6. `--hostname` flag targets a specific host
-7. A confirmation message is printed on success
-8. Exit code 0 on success
+1. Running `gor variable set NAME "value"` sets the repository variable `NAME`
+2. `--body` / `-b` flag provides the variable value inline
+3. `--org` flag sets the variable at the organization level
+4. `--repos` flag restricts an org variable to specific repositories (comma-separated)
+5. `--visibility` flag sets org variable visibility (`all`, `private`, or `selected`)
+6. Setting an existing variable updates it (idempotent)
+7. `--hostname` flag targets a specific host
+8. A success message is printed on completion
 
 ## Out of scope
 
+- Encrypting values (variables are stored plaintext by GitHub)
 - Deleting variables (separate story)
-- Environment-scoped variables

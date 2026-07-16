@@ -9,24 +9,23 @@ endpoints: []
 
 ## As a
 
-developer who wants to add functionality to `gor`
+developer who wants to extend `gor` with community commands
 
 ## I want
 
-to install an extension from a git repository
+to install a `gor` extension from a git repository
 
 ## Acceptance criteria
 
-1. Running `gor extension install owner/repo` installs the extension from the given repository
-2. A full repository URL may also be passed as the argument
-3. The extension is cloned into the extensions directory (`~/.config/gor/extensions`)
-4. `--hostname` flag installs an extension for a specific host
-5. `--force` flag reinstalls an already-installed extension
-6. On success, the installed extension's command becomes available via `gor <extension-name>`
-7. The extension name and version are printed on success
-8. Exit code 0 on success
+1. Running `gor extension install owner/repo` installs the extension from that GitHub repo
+2. A full `https://github.com/owner/repo` URL is also accepted
+3. The extension binary is fetched/built and placed in the extensions directory (`~/.local/share/gor/extensions` or equivalent)
+4. `--force` flag reinstalls over an existing extension of the same name
+5. A success message shows the installed extension name and version
+6. `--hostname` flag scopes installation to a specific host
+7. Invalid or missing extension repositories fail with a clear error and non-zero exit code
 
 ## Out of scope
 
-- Building extensions from source (they must be pre-built binaries in the repo)
-- Extension discovery/marketplace browsing
+- Automatic dependency resolution for extensions
+- Trust verification of third-party extension code

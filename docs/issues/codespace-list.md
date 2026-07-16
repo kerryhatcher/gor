@@ -1,6 +1,6 @@
 ---
 tags: [codespace, read]
-priority: P3
+priority: P2
 phase: 4
 endpoints:
   - GET /user/codespaces
@@ -10,23 +10,22 @@ endpoints:
 
 ## As a
 
-developer who uses GitHub Codespaces
+developer with cloud development environments on github.com
 
 ## I want
 
-to list my active codespaces
+to list my GitHub Codespaces
 
 ## Acceptance criteria
 
-1. Running `gor codespace list` lists all my codespaces
-2. Each row shows: display name, repository, branch, state, created date
-3. `--repo` / `-R` flag filters by repository
+1. Running `gor codespace list` prints all of the authenticated user's codespaces
+2. Each row shows: name, repository, branch, state, and created date
+3. `--repo` flag filters codespaces for a specific repository
 4. `--limit` / `-L` flag caps results (default: 30)
 5. `--json` flag outputs as JSON with optional field selection
-6. Only available on github.com (not GHES) — a clear error is shown when used on GHES
-7. Exit code 0 on success
+6. Codespaces are only available on github.com — GHES returns a clear "unsupported" error
 
 ## Out of scope
 
-- Starting or stopping codespaces (separate stories)
-- Codespace creation
+- Creating or deleting codespaces (separate stories)
+- Filtering by machine type

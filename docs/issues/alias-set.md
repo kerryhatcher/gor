@@ -9,23 +9,23 @@ endpoints: []
 
 ## As a
 
-developer who wants to shorten frequently used `gor` commands
+developer who repeats long `gor` command sequences
 
 ## I want
 
-to define a persistent command alias
+to define a short alias that expands to a longer `gor` subcommand
 
 ## Acceptance criteria
 
-1. Running `gor alias set co "pr checkout"` creates an alias `co` that expands to `pr checkout`
-2. The alias is stored in `gor`'s local config file (`~/.config/gor/config.yml`)
-3. `--hostname` flag scopes the alias to a specific host
-4. An existing alias with the same name is overwritten with a confirmation message
-5. The new alias is printed on success in `name: expansion` form
-6. Exit code 0 on success
+1. Running `gor alias set co 'pr checkout'` creates an alias named `co` that expands to `pr checkout`
+2. Aliases expand only to `gor` subcommands (no arbitrary shell)
+3. `--clobber` flag overwrites an existing alias of the same name
+4. Without `--clobber`, defining a duplicate alias fails with a clear error and non-zero exit code
+5. Aliases are persisted in `~/.config/gor/config.yml` (mode 0600)
+6. The alias definition is printed on success
+7. `--hostname` flag scopes the alias to a specific host
 
 ## Out of scope
 
-- Shell completion integration
-- Importing aliases from `gh` config (separate story)
-- Validating that the expansion is a valid `gor` command at definition time
+- Aliases that shell out to arbitrary binaries
+- Importing/exporting alias sets (separate story)

@@ -1,6 +1,6 @@
 ---
 tags: [project, read]
-priority: P3
+priority: P2
 phase: 3
 endpoints:
   - GET /orgs/{org}/projects
@@ -11,25 +11,23 @@ endpoints:
 
 ## As a
 
-developer tracking work in GitHub Projects
+developer or maintainer tracking work in projects
 
 ## I want
 
-to list projects for an organization or repository
+to list the GitHub Projects associated with an org or repository
 
 ## Acceptance criteria
 
-1. Running `gor project list --owner myorg` lists projects owned by `myorg`
-2. Running `gor project list --repo owner/repo` lists projects for that repository
-3. Each row shows: project number, title, state (open/closed), visibility
-4. `--owner` / `-o` flag lists projects for a user or org
-5. `--repo` / `-R` flag lists projects for a repository
-6. `--limit` / `-L` flag caps results (default: 30)
-7. `--json` flag outputs as JSON with optional field selection
-8. `--hostname` flag targets a specific host
-9. Exit code 0 on success
+1. Running `gor project list` in a repo directory lists projects linked to that repository
+2. `--org` flag lists projects owned by an organization
+3. `--owner` flag lists projects owned by a user
+4. Each row shows: project number, title, state (open/closed), and visibility
+5. `--limit` / `-L` flag caps results (default: 30)
+6. `--json` flag outputs as JSON with optional field selection
+7. `--hostname` flag targets a specific host
 
 ## Out of scope
 
-- Project item management (separate story)
-- Creating projects
+- Projects V2 (GraphQL-based) — the REST endpoints cover classic Projects
+- Viewing project items (separate story)

@@ -9,21 +9,21 @@ endpoints: []
 
 ## As a
 
-developer who no longer needs a shortcut
+developer who no longer needs an alias
 
 ## I want
 
-to remove a command alias
+to remove a configured `gor` alias
 
 ## Acceptance criteria
 
 1. Running `gor alias delete co` removes the alias named `co`
-2. `--hostname` flag removes an alias scoped to a specific host
-3. A confirmation message is printed on success
-4. If the alias does not exist, a message indicates it was not found
-5. Exit code 0 on success
+2. The alias removal is persisted to `~/.config/gor/config.yml`
+3. `--hostname` flag scopes the deletion to a specific host
+4. Deleting a non-existent alias is a no-op with a clear message
+5. A confirmation message is printed on success
 
 ## Out of scope
 
-- Bulk deletion of aliases
-- Deleting aliases for all hosts at once
+- Bulk alias deletion
+- Restoring a deleted alias

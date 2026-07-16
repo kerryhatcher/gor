@@ -1,6 +1,6 @@
 ---
 tags: [gpg-key, write]
-priority: P3
+priority: P2
 phase: 3
 endpoints:
   - POST /user/gpg_keys
@@ -10,21 +10,22 @@ endpoints:
 
 ## As a
 
-developer who wants to sign commits and tags with GPG
+developer who wants to sign my commits with a new GPG key
 
 ## I want
 
-to add a new GPG public key to my account
+to add a GPG public key to my GitHub account
 
 ## Acceptance criteria
 
-1. Running `gor gpg-key add "-----BEGIN PGP PUBLIC KEY BLOCK-----..."` adds the given armored public key
-2. The key body may also be read from a file path argument instead of inline
-3. `--hostname` flag targets a specific host
-4. A confirmation message with the key ID is printed on success
-5. Exit code 0 on success
+1. Running `gor gpg-key add -f mykey.asc` adds the armored public key from the file
+2. `--file` / `-f` flag reads the ASCII-armored public key from a file
+3. `--body` / `-b` flag provides the armored key inline (alternative to `--file`)
+4. `--hostname` flag targets a specific host
+5. The created key's ID is printed on success
+6. A malformed or non-armored key fails with a clear error and non-zero exit code
 
 ## Out of scope
 
-- Generating GPG key pairs (use `gpg --gen-key`)
-- Deleting keys (separate story)
+- Uploading private keys (never sent to GitHub)
+- Associating keys with specific email verification

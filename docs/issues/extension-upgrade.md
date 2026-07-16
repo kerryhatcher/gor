@@ -9,22 +9,22 @@ endpoints: []
 
 ## As a
 
-developer who wants the latest fixes in installed extensions
+developer who wants the latest version of installed extensions
 
 ## I want
 
-to upgrade my installed extensions to their latest versions
+to upgrade one or all installed `gor` extensions
 
 ## Acceptance criteria
 
-1. Running `gor extension upgrade` upgrades all installed extensions to their latest versions
-2. `gor extension upgrade <name>` upgrades a single named extension
-3. `--hostname` flag upgrades extensions for a specific host
-4. Each upgraded extension's name and new version are printed on success
-5. If an extension is already up to date, a message indicates no update available
-6. Exit code 0 on success
+1. Running `gor extension upgrade repo` upgrades the named extension to its latest release/tag
+2. Running `gor extension upgrade --all` upgrades every installed extension
+3. The upgrade pulls the latest from the extension's source repository
+4. `--hostname` flag scopes the upgrade to a specific host
+5. Extensions already at the latest version are skipped with a message
+6. A summary of upgraded (and skipped) extensions is printed
 
 ## Out of scope
 
-- Downgrading extensions
-- Upgrading to a specific version tag (always latest)
+- Downgrading an extension to a prior version
+- Upgrading extensions with local uncommitted changes

@@ -9,21 +9,21 @@ endpoints: []
 
 ## As a
 
-developer who no longer needs an installed extension
+developer who no longer wants an installed extension
 
 ## I want
 
-to uninstall an extension
+to uninstall a `gor` extension
 
 ## Acceptance criteria
 
-1. Running `gor extension remove <name>` removes the extension by name
-2. `--hostname` flag removes an extension for a specific host
-3. A confirmation message is printed on success
-4. If the extension is not installed, a message indicates it was not found
-5. Exit code 0 on success
+1. Running `gor extension remove repo` removes the installed extension named `repo`
+2. The extension's files are deleted from the extensions directory
+3. `--hostname` flag scopes removal to a specific host
+4. Removing a non-existent extension is a no-op with a clear message
+5. A confirmation message is printed on success
 
 ## Out of scope
 
-- Removing all extensions at once
-- Removing extension data/cache beyond the extension directory
+- Disabling an extension without deleting it
+- Removing multiple extensions at once

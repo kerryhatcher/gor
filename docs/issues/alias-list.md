@@ -9,22 +9,21 @@ endpoints: []
 
 ## As a
 
-developer who wants to review their configured shortcuts
+developer who wants to recall defined aliases
 
 ## I want
 
-to list all defined command aliases
+to list all configured `gor` aliases
 
 ## Acceptance criteria
 
-1. Running `gor alias list` shows all defined aliases with their expansions
-2. Each row shows: alias name, expansion
-3. `--hostname` flag lists aliases for a specific host
-4. `--json` flag outputs as JSON
-5. If no aliases are defined, a message indicates no aliases exist (empty output)
-6. Exit code 0 on success
+1. Running `gor alias list` prints all defined aliases
+2. Each row shows: alias name and the command it expands to
+3. `--hostname` flag scopes the listing to a specific host
+4. `--json` flag outputs as JSON with optional field selection
+5. If no aliases exist, a message is printed and the command exits 0
 
 ## Out of scope
 
-- Editing aliases from this view
-- Showing which aliases are currently active in the shell
+- Editing aliases in place (use `gor alias set` / `gor alias delete`)
+- Showing built-in command help

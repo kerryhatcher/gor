@@ -1,34 +1,31 @@
 ---
 tags: [project, write]
-priority: P3
+priority: P2
 phase: 3
 endpoints:
-  - POST /projects/{project_id}/columns/{column_id}/cards
+  - POST /projects/{project_id}/items
 ---
 
 # Project Item Add
 
 ## As a
 
-developer organizing work into a project board
+maintainer organizing work into a project
 
 ## I want
 
-to add an issue or pull request to a project column
+to add an issue or pull request as an item to a GitHub Project
 
 ## Acceptance criteria
 
-1. Running `gor project item-add 5 --issue 42` adds issue #42 to project #5
-2. `--issue` flag adds an issue by number
-3. `--pull-request` flag adds a pull request by number
-4. `--column` / `-c` flag selects the target column (defaults to first column)
-5. `--owner` / `-o` flag specifies the project owner
-6. `--repo` / `-R` flag specifies the repository for resolving issue/PR numbers
-7. `--hostname` flag targets a specific host
-8. A confirmation message with the card ID is printed on success
-9. Exit code 0 on success
+1. Running `gor project item-add 7 --issue 42` adds issue #42 to project number 7
+2. `--pull-request` / `--pr` flag adds a pull request instead of an issue
+3. `--owner` / `--org` flag sets the project owner context
+4. `--project` flag selects the project by number or ID
+5. The created item's ID is printed on success
+6. `--hostname` flag targets a specific host
 
 ## Out of scope
 
-- Reordering items within a column
-- Adding notes (non-issue/PR cards)
+- Setting column/status field values on add
+- Removing or reordering project items

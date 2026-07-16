@@ -1,34 +1,31 @@
 ---
 tags: [project, read]
-priority: P3
+priority: P2
 phase: 3
 endpoints:
   - GET /projects/{project_id}
-  - GET /projects/{project_id}/columns
 ---
 
 # Project View
 
 ## As a
 
-developer inspecting a project's structure
+developer who wants to inspect a project's details
 
 ## I want
 
-to see a project's title, description, and columns
+to view a single GitHub Project by number or ID
 
 ## Acceptance criteria
 
-1. Running `gor project view 5` shows project #5 for the current owner
-2. The project title, description, state, and visibility are displayed
-3. Columns are listed with their names and item counts
-4. `--owner` / `-o` flag specifies the project owner
-5. `--web` / `-w` flag opens the project in the browser
-6. `--json` flag outputs as JSON with optional field selection
-7. `--hostname` flag targets a specific host
-8. Exit code 0 on success
+1. Running `gor project view 7` shows project number 7 for the current repository context
+2. `--owner` / `--org` flag sets the project owner context when not in a repo
+3. The displayed fields include: title, body, state, creator, and created/updated dates
+4. `--web` / `-w` flag opens the project in the browser
+5. `--json` flag outputs as JSON with optional field selection
+6. `--hostname` flag targets a specific host
 
 ## Out of scope
 
-- Editing project fields or items inline
-- Viewing individual project items' content
+- Rendering the project board / column layout
+- Editing project fields (separate story)

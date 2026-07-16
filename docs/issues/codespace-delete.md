@@ -1,6 +1,6 @@
 ---
 tags: [codespace, write]
-priority: P3
+priority: P2
 phase: 4
 endpoints:
   - DELETE /user/codespaces/{codespace_name}
@@ -10,21 +10,22 @@ endpoints:
 
 ## As a
 
-developer who no longer needs a cloud environment
+developer who no longer needs a cloud dev environment
 
 ## I want
 
-to delete a codespace
+to delete a GitHub Codespace
 
 ## Acceptance criteria
 
-1. Running `gor codespace delete my-codespace` deletes the named codespace
-2. A confirmation prompt is shown before deletion (bypassed with `--yes`)
-3. Only available on github.com — a clear error is shown when used on GHES
-4. A success message is printed after deletion
-5. Exit code 0 on success
+1. Running `gor codespace delete <name>` deletes the named codespace
+2. The codespace name is resolved from `gor codespace list` output
+3. A confirmation prompt is shown before deletion (bypassed with `--yes`)
+4. `--repo` flag scopes selection when only a partial name is given
+5. A success message is printed after deletion
+6. Codespaces are only available on github.com
 
 ## Out of scope
 
 - Bulk deletion of all codespaces
-- Stopping without deleting (separate story)
+- Recovering a deleted codespace

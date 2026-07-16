@@ -1,6 +1,6 @@
 ---
 tags: [variable, write]
-priority: P3
+priority: P2
 phase: 3
 endpoints:
   - DELETE /repos/{owner}/{repo}/actions/variables/{name}
@@ -11,23 +11,21 @@ endpoints:
 
 ## As a
 
-developer cleaning up obsolete configuration
+developer cleaning up obsolete CI configuration
 
 ## I want
 
-to delete a repository or organization variable
+to delete an Actions variable from a repository or organization
 
 ## Acceptance criteria
 
-1. Running `gor variable delete NAME` deletes variable `NAME`
-2. `--repo` / `-R` flag specifies the repository explicitly
-3. `--org` flag deletes an organization-level variable
+1. Running `gor variable delete NAME` deletes the repository variable `NAME`
+2. `--org` flag deletes the variable at the organization level
+3. `--hostname` flag targets a specific host
 4. A confirmation message is printed on success
-5. If the variable does not exist, a message indicates it was not found
-6. `--hostname` flag targets a specific host
-7. Exit code 0 on success
+5. Deleting a non-existent variable fails with a clear error and non-zero exit code
 
 ## Out of scope
 
-- Bulk deletion
-- Deleting environment-scoped variables
+- Bulk deletion of variables
+- Restoring a deleted variable
