@@ -22,6 +22,7 @@ pub fn run(cmd: AliasCommand) -> anyhow::Result<()> {
             command,
             hostname: _,
         } => set(&name, &command),
+        AliasCommand::Delete { name, hostname: _ } => delete(&name),
     }
 }
 
@@ -91,6 +92,45 @@ fn set(name: &str, command: &[String]) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Execute `gor alias delete`.
+///
+/// Removes a configured alias by name. If the alias does not exist,
+/// prints a message and returns successfully.
+///
+/// # Errors
+///
+/// Returns an error if the configuration cannot be loaded or saved.
+fn delete(name: &str) -> anyhow::Result<()> {
+    let mut config = config::load().context("failed to load config")?;
+    let aliases = config
+        .global
+        .get("aliases")
+        .and_then(|v| v.as_mapping().cloned());
+
+    let Some(mut aliases) = aliases else {
+        println!("Alias '{name}' not found.");
+        return Ok(());
+    };
+
+    let key = serde_yaml_ng::Value::String(name.to_string());
+    if !aliases.contains_key(&key) {
+        println!("Alias '{name}' not found.");
+        return Ok(());
+    }
+
+    aliases.remove(&key);
+
+    config.global.insert(
+        "aliases".to_string(),
+        serde_yaml_ng::Value::Mapping(aliases),
+    );
+
+    config::save(&config).context("failed to save config")?;
+
+    println!("Alias '{name}' deleted.");
+    Ok(())
+}
+
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
@@ -100,6 +140,15 @@ mod tests {
     fn set_requires_command() {
         let result = std::panic::catch_unwind(|| {
             let _ = set("test", &[]);
+        });
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn delete_nonexistent_is_noop() {
+        // Should not panic or error when deleting a non-existent alias
+        let result = std::panic::catch_unwind(|| {
+            let _ = delete("nonexistent");
         });
         assert!(result.is_ok());
     }

@@ -1303,4 +1303,12 @@ pub enum AliasCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Delete an alias.
+    Delete {
+        /// Alias name to delete.
+        name: String,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
