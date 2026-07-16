@@ -58,6 +58,30 @@ pub fn run(cmd: IssueCommand) -> anyhow::Result<()> {
             json,
             hostname.as_deref(),
         ),
+        IssueCommand::Close {
+            number,
+            repo,
+            comment,
+            reason,
+            hostname,
+        } => close(
+            number,
+            repo.as_deref(),
+            comment.as_deref(),
+            reason.as_deref(),
+            hostname.as_deref(),
+        ),
+        IssueCommand::Reopen {
+            number,
+            repo,
+            comment,
+            hostname,
+        } => reopen(
+            number,
+            repo.as_deref(),
+            comment.as_deref(),
+            hostname.as_deref(),
+        ),
     }
 }
 
@@ -300,6 +324,158 @@ fn view(
 
     // Print formatted view
     print_issue_view(&issue, &comments_data);
+    Ok(())
+}
+
+/// Execute `gor issue close`.
+///
+/// Closes an issue by PATCHing its state to "closed". Optionally adds a
+/// closing comment and sets a close reason.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the issue does not
+/// exist, or the API request fails.
+fn close(
+    number: u64,
+    repo: Option<&str>,
+    comment: Option<&str>,
+    reason: Option<&str>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Build the PATCH body
+    let mut body = serde_json::json!({
+        "state": "closed",
+    });
+
+    if let Some(r) = reason {
+        body["state_reason"] = serde_json::Value::String(r.to_string());
+    }
+
+    let path = format!("/repos/{}/{}/issues/{number}", spec.owner, spec.repo);
+    let response = client
+        .request("PATCH", &path, &[], Some(serde_json::to_vec(&body)?))
+        .context("failed to close issue")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("issue #{number} not found in '{spec}'");
+    }
+    if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+        anyhow::bail!("authentication required to close issue #{number}");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to close issue #{number}: HTTP {status}");
+    }
+
+    // Add comment if requested
+    if let Some(c) = comment {
+        let comment_path = format!(
+            "/repos/{}/{}/issues/{number}/comments",
+            spec.owner, spec.repo
+        );
+        let comment_body = serde_json::json!({ "body": c });
+        let comment_response = client
+            .request(
+                "POST",
+                &comment_path,
+                &[],
+                Some(serde_json::to_vec(&comment_body)?),
+            )
+            .context("failed to add closing comment")?;
+        if !comment_response.status().is_success() {
+            tracing::warn!(
+                "failed to add closing comment: HTTP {}",
+                comment_response.status()
+            );
+        }
+    }
+
+    let reason_str = reason.map_or_else(String::new, |r| format!(" as {r}"));
+    println!("✓ issue #{number} closed{reason_str}");
+    Ok(())
+}
+
+/// Execute `gor issue reopen`.
+///
+/// Reopens a closed issue by PATCHing its state to "open". Optionally adds
+/// a comment when reopening.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the issue does not
+/// exist, or the API request fails.
+fn reopen(
+    number: u64,
+    repo: Option<&str>,
+    comment: Option<&str>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let body = serde_json::json!({
+        "state": "open",
+    });
+
+    let path = format!("/repos/{}/{}/issues/{number}", spec.owner, spec.repo);
+    let response = client
+        .request("PATCH", &path, &[], Some(serde_json::to_vec(&body)?))
+        .context("failed to reopen issue")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("issue #{number} not found in '{spec}'");
+    }
+    if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+        anyhow::bail!("authentication required to reopen issue #{number}");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to reopen issue #{number}: HTTP {status}");
+    }
+
+    // Add comment if requested
+    if let Some(c) = comment {
+        let comment_path = format!(
+            "/repos/{}/{}/issues/{number}/comments",
+            spec.owner, spec.repo
+        );
+        let comment_body = serde_json::json!({ "body": c });
+        let comment_response = client
+            .request(
+                "POST",
+                &comment_path,
+                &[],
+                Some(serde_json::to_vec(&comment_body)?),
+            )
+            .context("failed to add comment")?;
+        if !comment_response.status().is_success() {
+            tracing::warn!("failed to add comment: HTTP {}", comment_response.status());
+        }
+    }
+
+    println!("✓ issue #{number} reopened");
     Ok(())
 }
 

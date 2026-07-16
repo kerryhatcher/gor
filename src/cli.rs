@@ -269,6 +269,37 @@ pub enum IssueCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Close an issue.
+    Close {
+        /// Issue number.
+        number: u64,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Add a closing comment.
+        #[arg(long)]
+        comment: Option<String>,
+        /// Reason for closing: completed or not_planned.
+        #[arg(long, value_parser = ["completed", "not_planned"])]
+        reason: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Reopen a closed issue.
+    Reopen {
+        /// Issue number.
+        number: u64,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Add a comment when reopening.
+        #[arg(long)]
+        comment: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor config`.
