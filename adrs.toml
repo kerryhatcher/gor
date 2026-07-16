@@ -1,1 +1,5 @@
 adr_dir = "docs/adr"
+mode = "nextgen"
+[templates]
+format = "madr"
+variant = "full"
