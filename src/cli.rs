@@ -1964,6 +1964,17 @@ pub enum CodespaceCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// List forwarded ports for a codespace.
+    Ports {
+        /// Codespace name.
+        name: String,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor alias`.

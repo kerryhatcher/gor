@@ -70,6 +70,11 @@ pub fn run(cmd: CodespaceCommand) -> anyhow::Result<()> {
             recursive,
             hostname,
         } => cp(&name, &paths, recursive, hostname.as_deref()),
+        CodespaceCommand::Ports {
+            name,
+            json,
+            hostname,
+        } => ports(&name, json, hostname.as_deref()),
     }
 }
 
@@ -485,6 +490,56 @@ fn cp(name: &str, paths: &[String], recursive: bool, hostname: Option<&str>) -> 
         anyhow::bail!(
             "at least one path must use the 'remote:' prefix to specify a codespace path"
         );
+    }
+
+    Ok(())
+}
+
+/// List forwarded ports for a codespace.
+///
+/// # Errors
+///
+/// Returns an error if the codespace is not running or the API request fails.
+fn ports(name: &str, json: Option<Vec<String>>, hostname: Option<&str>) -> anyhow::Result<()> {
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let path = format!("/user/codespaces/{name}/ports");
+    let response = client
+        .get(&path)
+        .context("failed to fetch codespace ports")?;
+    let status = response.status();
+    if !status.is_success() {
+        anyhow::bail!("failed to fetch ports for '{name}': HTTP {status}");
+    }
+
+    let ports: Vec<serde_json::Value> =
+        response.json().context("failed to parse ports response")?;
+
+    if let Some(fields) = json {
+        let fields_ref: Option<&[String]> = if fields.is_empty() {
+            None
+        } else {
+            Some(&fields)
+        };
+        print_json(&ports, fields_ref);
+        return Ok(());
+    }
+
+    if ports.is_empty() {
+        println!("No forwarded ports for codespace '{name}'.");
+        return Ok(());
+    }
+
+    println!("{:<24}  {:<12}  {:<12}", "LABEL", "PORT", "VISIBILITY");
+    for p in &ports {
+        let label = p["label"].as_str().unwrap_or("—");
+        let source_port = p["source_port"]
+            .as_u64()
+            .map_or_else(|| "—".to_string(), |v| v.to_string());
+        let visibility = p["visibility"].as_str().unwrap_or("—");
+        let label_truncated = crate::cmd::util::truncate(label, 24);
+        println!("{label_truncated:<24}  {source_port:<12}  {visibility:<12}");
     }
 
     Ok(())
