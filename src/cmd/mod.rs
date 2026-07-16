@@ -7,7 +7,9 @@ pub mod api;
 pub mod auth;
 pub mod config;
 pub mod issue;
+pub mod label;
 pub mod pr;
+pub mod release;
 pub mod repo;
 pub mod util;
 
@@ -27,5 +29,7 @@ pub fn dispatch(args: Args) -> anyhow::Result<()> {
         Command::Pr(cmd) => pr::run(cmd),
         Command::Issue(cmd) => issue::run(cmd),
         Command::Config(cmd) => config::run(cmd, args.hostname.as_deref()),
+        Command::Label(cmd) => label::run(cmd),
+        Command::Release(cmd) => release::run(cmd),
     }
 }

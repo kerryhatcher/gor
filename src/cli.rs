@@ -43,6 +43,12 @@ pub enum Command {
     /// Manage configuration values.
     #[command(subcommand)]
     Config(ConfigCommand),
+    /// Work with repository labels.
+    #[command(subcommand)]
+    Label(LabelCommand),
+    /// Work with releases.
+    #[command(subcommand)]
+    Release(ReleaseCommand),
 }
 
 /// Arguments for `gor api`.
@@ -546,4 +552,53 @@ pub enum ConfigCommand {
     },
     /// List all config values.
     List,
+}
+
+/// Subcommands for `gor label`.
+#[derive(Subcommand, Debug)]
+pub enum LabelCommand {
+    /// List labels in a repository.
+    List {
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Filter labels by name substring.
+        #[arg(long)]
+        search: Option<String>,
+        /// Maximum number of labels to show (default: 30).
+        #[arg(short = 'L', long, default_value = "30")]
+        limit: u32,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+}
+
+/// Subcommands for `gor release`.
+#[derive(Subcommand, Debug)]
+pub enum ReleaseCommand {
+    /// List releases in a repository.
+    List {
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Maximum number of releases to show (default: 30).
+        #[arg(short = 'L', long, default_value = "30")]
+        limit: u32,
+        /// Exclude draft releases.
+        #[arg(long)]
+        exclude_drafts: bool,
+        /// Exclude prereleases.
+        #[arg(long)]
+        exclude_prereleases: bool,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
