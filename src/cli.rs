@@ -113,6 +113,30 @@ pub enum RepoCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// List repositories for a user or organization.
+    List {
+        /// Owner to list repos for (username or org). Defaults to authenticated user.
+        #[arg(long)]
+        owner: Option<String>,
+        /// Filter by visibility: public, private, or all (default: all).
+        #[arg(long, default_value = "all")]
+        visibility: String,
+        /// Filter by fork status: include, exclude, or only (default: include).
+        #[arg(long, default_value = "include")]
+        fork: String,
+        /// Filter by primary language.
+        #[arg(short = 'l', long)]
+        language: Option<String>,
+        /// Maximum number of repos to show (default: 30).
+        #[arg(short = 'L', long, default_value = "30")]
+        limit: u32,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor auth`.
