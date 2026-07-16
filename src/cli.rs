@@ -100,6 +100,9 @@ pub enum Command {
     /// Verify artifact attestations.
     #[command(subcommand)]
     Attestation(AttestationCommand),
+    /// Work with GitHub Classroom.
+    #[command(subcommand)]
+    Classroom(ClassroomCommand),
     /// Generate shell completion scripts.
     Completion {
         /// Shell type: bash, zsh, fish, or powershell.
@@ -2200,6 +2203,31 @@ pub enum AttestationCommand {
         /// Local Sigstore bundle file instead of fetching from API.
         #[arg(long)]
         bundle: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+}
+
+/// Subcommands for `gor classroom`.
+#[derive(Subcommand, Debug)]
+pub enum ClassroomCommand {
+    /// List classrooms.
+    List {
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// List assignments for a classroom.
+    Assignments {
+        /// Classroom ID.
+        id: u64,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
         /// GitHub hostname for GitHub Enterprise Server (default: github.com).
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,

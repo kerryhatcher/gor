@@ -5,7 +5,7 @@ phase: 4
 endpoints:
   - GET /classrooms
   - GET /classrooms/{classroom_id}/assignments
-status: todo
+status: done
 blockedBy: [auth-login]
 blocks: []
 ---

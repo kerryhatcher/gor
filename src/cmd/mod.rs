@@ -9,6 +9,7 @@ pub mod attestation;
 pub mod auth;
 pub mod browse;
 pub mod cache;
+pub mod classroom;
 pub mod codespace;
 pub mod completion;
 pub mod config;
@@ -65,6 +66,7 @@ pub fn dispatch(args: Args) -> anyhow::Result<()> {
         Command::Codespace(cmd) => codespace::run(cmd),
         Command::Project(cmd) => project::run(cmd),
         Command::Attestation(cmd) => attestation::run(cmd),
+        Command::Classroom(cmd) => classroom::run(cmd),
         Command::Completion { shell } => completion::run(&shell),
     }
 }
