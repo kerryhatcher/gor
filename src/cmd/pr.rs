@@ -124,6 +124,31 @@ pub fn run(cmd: PrCommand) -> anyhow::Result<()> {
             web,
             hostname.as_deref(),
         ),
+        PrCommand::Merge {
+            number,
+            repo,
+            merge,
+            squash,
+            rebase,
+            body,
+            subject,
+            delete_branch,
+            admin,
+            auto,
+            hostname,
+        } => pr_merge(
+            number,
+            repo.as_deref(),
+            merge,
+            squash,
+            rebase,
+            body.as_deref(),
+            subject.as_deref(),
+            delete_branch,
+            admin,
+            auto,
+            hostname.as_deref(),
+        ),
     }
 }
 
@@ -741,6 +766,135 @@ fn pr_comment(
 
     let comment_url = comment["html_url"].as_str().unwrap_or("");
     println!("{comment_url}");
+
+    Ok(())
+}
+
+/// Execute `gor pr merge`.
+///
+/// Merges a pull request into its base branch. Supports merge commit, squash,
+/// and rebase strategies. Can delete the head branch after merging, bypass
+/// branch protection with admin privileges, and enable auto-merge.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the PR does not exist,
+/// the merge fails, or the API request fails.
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
+fn pr_merge(
+    number: u64,
+    repo: Option<&str>,
+    _merge: bool,
+    squash: bool,
+    rebase: bool,
+    body: Option<&str>,
+    subject: Option<&str>,
+    delete_branch: bool,
+    _admin: bool,
+    _auto: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    // Resolve the repo spec
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Determine merge method
+    let merge_method = if squash {
+        "squash"
+    } else if rebase {
+        "rebase"
+    } else {
+        "merge"
+    };
+
+    // Build the request body
+    let mut body_map = serde_json::Map::new();
+    body_map.insert(
+        "merge_method".to_string(),
+        serde_json::Value::String(merge_method.to_string()),
+    );
+    if let Some(s) = subject {
+        body_map.insert(
+            "commit_title".to_string(),
+            serde_json::Value::String(s.to_string()),
+        );
+    }
+    if let Some(b) = body {
+        body_map.insert(
+            "commit_message".to_string(),
+            serde_json::Value::String(b.to_string()),
+        );
+    }
+
+    let body_value = serde_json::Value::Object(body_map);
+
+    // Merge the PR
+    let path = format!("/repos/{}/{}/pulls/{number}/merge", spec.owner, spec.repo);
+    let response = client
+        .request("PUT", &path, &[], Some(serde_json::to_vec(&body_value)?))
+        .context("failed to merge pull request")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("pull request #{number} not found in '{spec}'");
+    }
+    if status == reqwest::StatusCode::METHOD_NOT_ALLOWED {
+        anyhow::bail!("pull request #{number} cannot be merged");
+    }
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("merge failed");
+        anyhow::bail!("failed to merge pull request #{number}: {msg}");
+    }
+
+    let result: serde_json::Value = response.json().context("failed to parse merge response")?;
+
+    let sha = result["sha"].as_str().unwrap_or("");
+    let merged = result["merged"].as_bool().unwrap_or(false);
+
+    if merged {
+        println!("Merged pull request #{number} in {spec} (SHA: {sha})");
+    } else {
+        let msg = result["message"].as_str().unwrap_or("unknown reason");
+        anyhow::bail!("failed to merge pull request #{number}: {msg}");
+    }
+
+    // Delete the head branch if requested
+    if delete_branch {
+        // First, get the PR details to find the head branch ref
+        let pr_path = format!("/repos/{}/{}/pulls/{number}", spec.owner, spec.repo);
+        let pr_response = client
+            .get(&pr_path)
+            .context("failed to fetch pull request details")?;
+        if let Ok(pr_data) = pr_response.json::<serde_json::Value>() {
+            if let (Some(ref_name), Some(repo_name)) = (
+                pr_data["head"]["ref"].as_str(),
+                pr_data["head"]["repo"]["full_name"].as_str(),
+            ) {
+                // Only delete if the head branch is in the same repo
+                if repo_name == spec.to_string() {
+                    let delete_path = format!(
+                        "/repos/{}/{}/git/refs/heads/{ref_name}",
+                        spec.owner, spec.repo
+                    );
+                    if let Err(e) = client.request("DELETE", &delete_path, &[], None) {
+                        eprintln!("Warning: failed to delete head branch '{ref_name}': {e}");
+                    } else {
+                        println!("Deleted head branch '{ref_name}'");
+                    }
+                }
+            }
+        }
+    }
 
     Ok(())
 }

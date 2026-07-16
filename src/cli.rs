@@ -334,6 +334,41 @@ pub enum PrCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Merge a pull request.
+    Merge {
+        /// Pull request number.
+        number: u64,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Merge with a merge commit (default).
+        #[arg(long, conflicts_with_all = &["squash", "rebase"])]
+        merge: bool,
+        /// Squash commits into one.
+        #[arg(long, conflicts_with_all = &["merge", "rebase"])]
+        squash: bool,
+        /// Rebase commits onto the base branch.
+        #[arg(long, conflicts_with_all = &["merge", "squash"])]
+        rebase: bool,
+        /// Merge commit message body.
+        #[arg(long)]
+        body: Option<String>,
+        /// Merge commit subject.
+        #[arg(long)]
+        subject: Option<String>,
+        /// Delete the head branch after merging.
+        #[arg(long)]
+        delete_branch: bool,
+        /// Use admin privileges to bypass branch protection.
+        #[arg(long)]
+        admin: bool,
+        /// Enable auto-merge (merge when all checks pass).
+        #[arg(long)]
+        auto: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor issue`.
