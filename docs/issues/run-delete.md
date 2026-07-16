@@ -4,7 +4,7 @@ priority: P2
 phase: 4
 endpoints:
   - DELETE /repos/{owner}/{repo}/actions/runs/{id}
-status: todo
+status: done
 blockedBy: [run-view]
 blocks: []
 ---

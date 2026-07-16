@@ -1798,6 +1798,20 @@ pub enum RunCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Delete a workflow run.
+    Delete {
+        /// Run ID to delete.
+        id: u64,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Skip confirmation prompt.
+        #[arg(short = 'y', long)]
+        yes: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor cache`.

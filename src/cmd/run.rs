@@ -81,6 +81,12 @@ pub fn run(cmd: RunCommand) -> anyhow::Result<()> {
             exit_status,
             hostname.as_deref(),
         ),
+        RunCommand::Delete {
+            id,
+            repo,
+            yes,
+            hostname,
+        } => delete_run(id, repo.as_deref(), yes, hostname.as_deref()),
     }
 }
 
@@ -572,4 +578,59 @@ fn watch(
 
         std::thread::sleep(std::time::Duration::from_secs(interval));
     }
+}
+
+/// Execute `gor run delete`.
+///
+/// Deletes a workflow run and its logs.
+///
+/// # Errors
+///
+/// Returns an error if the run does not exist or the API request fails.
+fn delete_run(
+    id: u64,
+    repo: Option<&str>,
+    yes: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    if !yes {
+        use std::io::Write;
+        print!("Are you sure you want to delete run #{id}? [y/N] ");
+        std::io::stdout().flush().ok();
+
+        let mut input = String::new();
+        std::io::stdin()
+            .read_line(&mut input)
+            .context("failed to read input")?;
+        let input = input.trim().to_lowercase();
+        if input != "y" && input != "yes" {
+            println!("Cancelled.");
+            return Ok(());
+        }
+    }
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let spec = if let Some(r) = repo {
+        repository::parse_repo_spec(r).with_context(|| format!("invalid repository: {r}"))?
+    } else {
+        repository::detect_remote().context("could not detect repository from git remote")?
+    };
+
+    let path = format!("/repos/{}/{}/actions/runs/{id}", spec.owner, spec.repo);
+
+    let response = client
+        .request("DELETE", &path, &[], None)
+        .context("failed to delete run")?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("delete failed");
+        anyhow::bail!("failed to delete run #{id}: {msg}");
+    }
+
+    println!("Run #{id} deleted.");
+    Ok(())
 }
