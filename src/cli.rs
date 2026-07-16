@@ -1658,6 +1658,71 @@ pub enum RunCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Cancel a workflow run.
+    Cancel {
+        /// Run ID.
+        id: u64,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Download artifacts from a workflow run.
+    Download {
+        /// Run ID.
+        id: u64,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Output directory (default: current directory).
+        #[arg(short = 'D', long, default_value = ".")]
+        dir: String,
+        /// Filter artifacts by name (repeatable).
+        #[arg(long = "name")]
+        names: Vec<String>,
+        /// Download job logs instead of artifacts.
+        #[arg(long)]
+        log: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Rerun a workflow run.
+    Rerun {
+        /// Run ID.
+        id: u64,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Rerun only failed jobs.
+        #[arg(long)]
+        failed_jobs: bool,
+        /// Enable debug logging for the rerun.
+        #[arg(long)]
+        debug: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Watch a workflow run until completion.
+    Watch {
+        /// Run ID.
+        id: u64,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Poll interval in seconds (default: 3).
+        #[arg(long, default_value = "3")]
+        interval: u64,
+        /// Exit with the run's conclusion code.
+        #[arg(long)]
+        exit_status: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor cache`.
@@ -1755,6 +1820,17 @@ pub enum ExtensionCommand {
     Remove {
         /// Extension name to remove.
         name: String,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Upgrade extensions.
+    Upgrade {
+        /// Extension name to upgrade. If omitted with --all, upgrades all.
+        name: Option<String>,
+        /// Upgrade all installed extensions.
+        #[arg(long, conflicts_with = "name")]
+        all: bool,
         /// GitHub hostname for GitHub Enterprise Server (default: github.com).
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,

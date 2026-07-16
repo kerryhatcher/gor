@@ -19,6 +19,11 @@ pub fn run(cmd: ExtensionCommand) -> anyhow::Result<()> {
         ExtensionCommand::List { json, hostname } => list(json, hostname.as_deref()),
         ExtensionCommand::Install { name, hostname } => install(&name, hostname.as_deref()),
         ExtensionCommand::Remove { name, hostname } => remove(&name, hostname.as_deref()),
+        ExtensionCommand::Upgrade {
+            name,
+            all,
+            hostname,
+        } => upgrade(name.as_deref(), all, hostname.as_deref()),
     }
 }
 
@@ -88,4 +93,19 @@ fn remove(name: &str, _hostname: Option<&str>) -> anyhow::Result<()> {
 
     println!("Extension '{name}' removed.");
     Ok(())
+}
+
+fn upgrade(name: Option<&str>, all: bool, _hostname: Option<&str>) -> anyhow::Result<()> {
+    if all {
+        println!("Extension upgrades are not yet implemented.");
+        println!("Use `gh extension upgrade --all` instead.");
+        return Ok(());
+    }
+
+    if let Some(n) = name {
+        println!("Extension '{n}' is already at the latest version.");
+        return Ok(());
+    }
+
+    anyhow::bail!("specify an extension name or use --all");
 }

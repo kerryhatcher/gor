@@ -4,7 +4,7 @@ priority: P2
 phase: 2
 endpoints:
   - POST /repos/{owner}/{repo}/actions/runs/{id}/rerun
-status: todo
+status: done
 blockedBy: [run-view]
 blocks: []
 ---

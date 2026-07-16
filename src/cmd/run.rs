@@ -50,6 +50,37 @@ pub fn run(cmd: RunCommand) -> anyhow::Result<()> {
             json,
             hostname.as_deref(),
         ),
+        RunCommand::Cancel { id, repo, hostname } => {
+            cancel(id, repo.as_deref(), hostname.as_deref())
+        }
+        RunCommand::Download {
+            id,
+            repo,
+            dir,
+            names,
+            log,
+            hostname,
+        } => download(id, repo.as_deref(), &dir, &names, log, hostname.as_deref()),
+        RunCommand::Rerun {
+            id,
+            repo,
+            failed_jobs,
+            debug,
+            hostname,
+        } => rerun(id, repo.as_deref(), failed_jobs, debug, hostname.as_deref()),
+        RunCommand::Watch {
+            id,
+            repo,
+            interval,
+            exit_status,
+            hostname,
+        } => watch(
+            id,
+            repo.as_deref(),
+            interval,
+            exit_status,
+            hostname.as_deref(),
+        ),
     }
 }
 
@@ -273,4 +304,272 @@ fn view(
     }
 
     Ok(())
+}
+
+fn cancel(id: u64, repo: Option<&str>, hostname: Option<&str>) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => repository::parse_repo_spec(s).context("invalid repository spec")?,
+        None => repository::detect_remote().ok_or_else(|| {
+            anyhow::anyhow!("could not detect repository; specify OWNER/REPO with --repo")
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // First check the run status
+    let path = format!("/repos/{}/{}/actions/runs/{id}", spec.owner, spec.repo);
+    let response = client.get(&path).context("failed to fetch run")?;
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("run #{id} not found");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to fetch run: HTTP {status}");
+    }
+
+    let run_data: serde_json::Value = response.json().context("failed to parse response")?;
+    let run_status = run_data["status"].as_str().unwrap_or("");
+
+    let terminal_states = ["completed", "cancelled", "skipped", "timed_out"];
+    if terminal_states.contains(&run_status) {
+        let html_url = run_data["html_url"].as_str().unwrap_or("");
+        anyhow::bail!("run #{id} is already {run_status} ({html_url})");
+    }
+
+    let cancel_path = format!(
+        "/repos/{}/{}/actions/runs/{id}/cancel",
+        spec.owner, spec.repo
+    );
+    let cancel_response = client
+        .request("POST", &cancel_path, &[], None)
+        .context("failed to cancel run")?;
+
+    let cancel_status = cancel_response.status();
+    if !cancel_status.is_success() {
+        anyhow::bail!("failed to cancel run #{id}: HTTP {cancel_status}");
+    }
+
+    let html_url = run_data["html_url"].as_str().unwrap_or("");
+    println!("Run #{id} cancelled ({html_url})");
+    Ok(())
+}
+
+fn download(
+    id: u64,
+    repo: Option<&str>,
+    dir: &str,
+    names: &[String],
+    log: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => repository::parse_repo_spec(s).context("invalid repository spec")?,
+        None => repository::detect_remote().ok_or_else(|| {
+            anyhow::anyhow!("could not detect repository; specify OWNER/REPO with --repo")
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    if log {
+        // Download job logs
+        let jobs_path = format!("/repos/{}/{}/actions/runs/{id}/jobs", spec.owner, spec.repo);
+        let jobs_response = client.get(&jobs_path).context("failed to fetch jobs")?;
+        let jobs_data: serde_json::Value = jobs_response.json().context("failed to parse jobs")?;
+        let jobs: Vec<serde_json::Value> = jobs_data["jobs"]
+            .as_array()
+            .map_or_else(Vec::new, Clone::clone);
+
+        if jobs.is_empty() {
+            anyhow::bail!("no jobs found for run #{id}");
+        }
+
+        for job in &jobs {
+            let job_id = job["id"].as_u64().unwrap_or(0);
+            let job_name = job["name"].as_str().unwrap_or("unknown");
+            let log_path = format!(
+                "/repos/{}/{}/actions/jobs/{job_id}/logs",
+                spec.owner, spec.repo
+            );
+            let log_response = client.get(&log_path).context("failed to download logs")?;
+            if log_response.status().is_success() {
+                let body = log_response.text().context("failed to read logs")?;
+                let filename = format!("{dir}/{job_name}.log");
+                std::fs::write(&filename, &body)
+                    .with_context(|| format!("failed to write {filename}"))?;
+                println!("Downloaded: {filename}");
+            }
+        }
+        return Ok(());
+    }
+
+    // Download artifacts
+    let artifacts_path = format!(
+        "/repos/{}/{}/actions/runs/{id}/artifacts",
+        spec.owner, spec.repo
+    );
+    let artifacts_response = client
+        .get(&artifacts_path)
+        .context("failed to fetch artifacts")?;
+    let artifacts_data: serde_json::Value = artifacts_response
+        .json()
+        .context("failed to parse artifacts")?;
+    let artifacts: Vec<serde_json::Value> = artifacts_data["artifacts"]
+        .as_array()
+        .map_or_else(Vec::new, Clone::clone);
+
+    let filtered: Vec<&serde_json::Value> = if names.is_empty() {
+        artifacts.iter().collect()
+    } else {
+        artifacts
+            .iter()
+            .filter(|a| {
+                let a_name = a["name"].as_str().unwrap_or("");
+                names.iter().any(|n| n == a_name)
+            })
+            .collect()
+    };
+
+    if filtered.is_empty() {
+        anyhow::bail!("no artifacts found for run #{id}");
+    }
+
+    for artifact in &filtered {
+        let artifact_id = artifact["id"].as_u64().unwrap_or(0);
+        let artifact_name = artifact["name"].as_str().unwrap_or("unknown");
+        let zip_path = format!(
+            "/repos/{}/{}/actions/artifacts/{artifact_id}/zip",
+            spec.owner, spec.repo
+        );
+        let zip_response = client
+            .get(&zip_path)
+            .context("failed to download artifact")?;
+        if zip_response.status().is_success() {
+            let bytes = zip_response.bytes().context("failed to read artifact")?;
+            let filename = format!("{dir}/{artifact_name}.zip");
+            std::fs::write(&filename, &bytes)
+                .with_context(|| format!("failed to write {filename}"))?;
+            println!("Downloaded: {filename}");
+        }
+    }
+
+    Ok(())
+}
+
+fn rerun(
+    id: u64,
+    repo: Option<&str>,
+    failed_jobs: bool,
+    debug: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => repository::parse_repo_spec(s).context("invalid repository spec")?,
+        None => repository::detect_remote().ok_or_else(|| {
+            anyhow::anyhow!("could not detect repository; specify OWNER/REPO with --repo")
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let path = format!(
+        "/repos/{}/{}/actions/runs/{id}/rerun",
+        spec.owner, spec.repo
+    );
+
+    let mut body = serde_json::Map::new();
+    if failed_jobs {
+        body.insert(
+            "enable_debug_logging".to_string(),
+            serde_json::Value::Bool(debug),
+        );
+    }
+
+    let body_bytes = if body.is_empty() {
+        None
+    } else {
+        Some(serde_json::to_vec(&body).context("serialize")?)
+    };
+
+    let response = client
+        .request("POST", &path, &[], body_bytes)
+        .context("failed to rerun workflow")?;
+
+    let status = response.status();
+    if !status.is_success() {
+        anyhow::bail!("failed to rerun run #{id}: HTTP {status}");
+    }
+
+    let result: serde_json::Value = response.json().context("failed to parse response")?;
+    let html_url = result["html_url"].as_str().unwrap_or("");
+    println!("Run #{id} rerun: {html_url}");
+    Ok(())
+}
+
+fn watch(
+    id: u64,
+    repo: Option<&str>,
+    interval: u64,
+    exit_status: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => repository::parse_repo_spec(s).context("invalid repository spec")?,
+        None => repository::detect_remote().ok_or_else(|| {
+            anyhow::anyhow!("could not detect repository; specify OWNER/REPO with --repo")
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let terminal_states = ["completed", "cancelled", "skipped", "timed_out"];
+    let mut prev_job_states: Vec<(u64, String)> = Vec::new();
+
+    loop {
+        let path = format!("/repos/{}/{}/actions/runs/{id}", spec.owner, spec.repo);
+        let response = client.get(&path).context("failed to fetch run")?;
+        let run_data: serde_json::Value = response.json().context("failed to parse response")?;
+        let run_status = run_data["status"].as_str().unwrap_or("");
+        let conclusion = run_data["conclusion"].as_str().unwrap_or("");
+
+        // Fetch jobs
+        let jobs_path = format!("/repos/{}/{}/actions/runs/{id}/jobs", spec.owner, spec.repo);
+        if let Ok(jobs_resp) = client.get(&jobs_path) {
+            if let Ok(jobs_data) = jobs_resp.json::<serde_json::Value>() {
+                if let Some(jobs) = jobs_data["jobs"].as_array() {
+                    for job in jobs {
+                        let job_id = job["id"].as_u64().unwrap_or(0);
+                        let job_name = job["name"].as_str().unwrap_or("");
+                        let job_status = job["status"].as_str().unwrap_or("");
+                        let job_conclusion = job["conclusion"].as_str().unwrap_or("");
+                        let state_str = format!("{job_status}/{job_conclusion}");
+
+                        let prev = prev_job_states.iter().find(|(jid, _)| *jid == job_id);
+                        let changed = prev.is_none_or(|(_, s)| s != &state_str);
+
+                        if changed {
+                            println!("  {job_name}: {job_status} ({job_conclusion})");
+                            prev_job_states.retain(|(jid, _)| *jid != job_id);
+                            prev_job_states.push((job_id, state_str));
+                        }
+                    }
+                }
+            }
+        }
+
+        if terminal_states.contains(&run_status) {
+            let html_url = run_data["html_url"].as_str().unwrap_or("");
+            println!("Run #{id}: {run_status} ({conclusion}) — {html_url}");
+            if exit_status && conclusion == "failure" {
+                std::process::exit(1);
+            }
+            return Ok(());
+        }
+
+        std::thread::sleep(std::time::Duration::from_secs(interval));
+    }
 }

@@ -5,7 +5,7 @@ phase: 2
 endpoints:
   - GET /repos/{owner}/{repo}/actions/runs/{id}
   - GET /repos/{owner}/{repo}/actions/runs/{id}/jobs
-status: todo
+status: done
 blockedBy: [run-view]
 blocks: []
 ---
