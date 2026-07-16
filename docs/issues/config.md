@@ -3,6 +3,7 @@ tags: [config, read, write]
 priority: P2
 phase: 3
 endpoints: []
+status: done
 ---
 
 # Config
@@ -32,3 +33,12 @@ to view and set `gor` configuration values stored in `~/.config/gor/config.yml`
 - Deleting a config key (treat as setting to empty or use `gor config set key ""`)
 - Encrypted config values (tokens live in the keyring, not config)
 - Per-repository config overrides (not supported in v1)
+
+## Implementation
+
+- **Module:** `src/config.rs` — YAML config file I/O
+- **Command:** `src/cmd/config.rs` — `gor config {get,set,list}`
+- **Config path:** `~/.config/gor/config.yml` (mode 0600 on Unix)
+- **Format:** YAML with optional `hosts:` section for host-scoped overrides
+- **Validation:** Key whitelist + `git_protocol` value check (https/ssh only)
+- **Tests:** 20 unit tests covering load, save, get, set, validate, host scoping
