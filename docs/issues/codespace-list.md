@@ -4,7 +4,7 @@ priority: P2
 phase: 4
 endpoints:
   - GET /user/codespaces
-status: todo
+status: done
 blockedBy: [auth-login]
 blocks: [codespace-delete, codespace-stop, codespace-ssh, codespace-logs]
 ---

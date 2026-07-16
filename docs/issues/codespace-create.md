@@ -4,7 +4,7 @@ priority: P2
 phase: 4
 endpoints:
   - POST /repos/{owner}/{repo}/codespaces
-status: todo
+status: done
 blockedBy: [auth-login]
 blocks: []
 ---

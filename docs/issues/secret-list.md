@@ -5,7 +5,7 @@ phase: 3
 endpoints:
   - GET /repos/{owner}/{repo}/actions/secrets
   - GET /orgs/{org}/actions/secrets
-status: todo
+status: done
 blockedBy: [repo-view]
 blocks: [secret-delete]
 

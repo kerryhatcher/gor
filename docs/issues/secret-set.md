@@ -5,7 +5,7 @@ phase: 3
 endpoints:
   - PUT /repos/{owner}/{repo}/actions/secrets/{name}
   - PUT /orgs/{org}/actions/secrets/{name}
-status: todo
+status: done
 blockedBy: [repo-view]
 blocks: []
 

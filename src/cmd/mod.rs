@@ -7,7 +7,10 @@ pub mod alias;
 pub mod api;
 pub mod auth;
 pub mod browse;
+pub mod cache;
+pub mod codespace;
 pub mod config;
+pub mod extension;
 pub mod gist;
 pub mod issue;
 pub mod keys;
@@ -16,8 +19,12 @@ pub mod org;
 pub mod pr;
 pub mod release;
 pub mod repo;
+pub mod ruleset;
+pub mod run;
 pub mod search;
+pub mod secret;
 pub mod util;
+pub mod variable;
 pub mod workflow;
 
 use crate::cli::{Args, Command};
@@ -46,12 +53,12 @@ pub fn dispatch(args: Args) -> anyhow::Result<()> {
         Command::Org(cmd) => org::run(cmd),
         Command::SshKey(cmd) => keys::run_ssh(cmd),
         Command::GpgKey(cmd) => keys::run_gpg(cmd),
-        Command::Secret(_cmd) => anyhow::bail!("secret command not yet implemented"),
-        Command::Variable(_cmd) => anyhow::bail!("variable command not yet implemented"),
-        Command::Run(_cmd) => anyhow::bail!("run command not yet implemented"),
-        Command::Cache(_cmd) => anyhow::bail!("cache command not yet implemented"),
-        Command::Ruleset(_cmd) => anyhow::bail!("ruleset command not yet implemented"),
-        Command::Extension(_cmd) => anyhow::bail!("extension command not yet implemented"),
-        Command::Codespace(_cmd) => anyhow::bail!("codespace command not yet implemented"),
+        Command::Secret(cmd) => secret::run(cmd),
+        Command::Variable(cmd) => variable::run(cmd),
+        Command::Run(cmd) => run::run(cmd),
+        Command::Cache(cmd) => cache::run(cmd),
+        Command::Ruleset(cmd) => ruleset::run(cmd),
+        Command::Extension(cmd) => extension::run(cmd),
+        Command::Codespace(cmd) => codespace::run(cmd),
     }
 }

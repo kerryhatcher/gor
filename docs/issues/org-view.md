@@ -4,7 +4,7 @@ priority: P2
 phase: 3
 endpoints:
   - GET /orgs/{org}
-status: todo
+status: done
 blockedBy: [org-list]
 blocks: [project-list]
 ---

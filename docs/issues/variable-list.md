@@ -5,7 +5,7 @@ phase: 3
 endpoints:
   - GET /repos/{owner}/{repo}/actions/variables
   - GET /orgs/{org}/actions/variables
-status: todo
+status: done
 blockedBy: [repo-view]
 blocks: [variable-delete]
 

@@ -1397,6 +1397,42 @@ pub enum WorkflowCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Enable a workflow.
+    Enable {
+        /// Workflow ID, filename (e.g. deploy.yml), or name.
+        workflow: String,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Disable a workflow.
+    Disable {
+        /// Workflow ID, filename (e.g. deploy.yml), or name.
+        workflow: String,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Run a workflow.
+    Run {
+        /// Workflow ID, filename (e.g. deploy.yml), or name.
+        workflow: String,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Branch to run the workflow on.
+        #[arg(short = 'b', long)]
+        branch: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor org`.
@@ -1407,6 +1443,20 @@ pub enum OrgCommand {
         /// Maximum number of organizations to show (default: 30).
         #[arg(short = 'L', long, default_value = "30")]
         limit: u32,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// View an organization's profile.
+    View {
+        /// Organization name.
+        org: String,
+        /// Open the organization in the browser.
+        #[arg(short = 'w', long)]
+        web: bool,
         /// Output as JSON. Optionally specify comma-separated field names.
         #[arg(long, num_args = 0.., value_delimiter = ',')]
         json: Option<Vec<String>>,

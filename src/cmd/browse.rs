@@ -51,7 +51,7 @@ pub fn run(cmd: BrowseCommand, hostname: Option<&str>) -> anyhow::Result<()> {
 }
 
 /// Open a URL in the default browser.
-fn open_in_browser(url: &str) {
+pub fn open_in_browser(url: &str) {
     #[cfg(target_os = "linux")]
     {
         let _ = std::process::Command::new("xdg-open").arg(url).spawn();

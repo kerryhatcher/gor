@@ -29,6 +29,27 @@ pub fn run(cmd: WorkflowCommand) -> anyhow::Result<()> {
             json,
             hostname,
         } => view(&workflow, repo.as_deref(), json, hostname.as_deref()),
+        WorkflowCommand::Enable {
+            workflow,
+            repo,
+            hostname,
+        } => enable(&workflow, repo.as_deref(), hostname.as_deref()),
+        WorkflowCommand::Disable {
+            workflow,
+            repo,
+            hostname,
+        } => disable(&workflow, repo.as_deref(), hostname.as_deref()),
+        WorkflowCommand::Run {
+            workflow,
+            repo,
+            branch,
+            hostname,
+        } => trigger_workflow_run(
+            &workflow,
+            repo.as_deref(),
+            branch.as_deref(),
+            hostname.as_deref(),
+        ),
     }
 }
 
@@ -255,6 +276,130 @@ fn print_workflow_table(workflows: &[serde_json::Value]) {
 
         println!("{id:<id_width$}  {name_truncated:<name_width$}  {state:<state_width$}");
     }
+}
+
+/// Execute `gor workflow enable`.
+///
+/// Enables a workflow.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found or the API request fails.
+fn enable(workflow: &str, repo: Option<&str>, hostname: Option<&str>) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let path = format!(
+        "/repos/{}/{}/actions/workflows/{workflow}/enable",
+        spec.owner, spec.repo
+    );
+
+    let response = client
+        .request("PUT", &path, &[], None)
+        .context("failed to enable workflow")?;
+
+    let status = response.status();
+    if !status.is_success() {
+        anyhow::bail!("failed to enable workflow '{workflow}': HTTP {status}");
+    }
+
+    println!("Workflow '{workflow}' is now enabled.");
+    Ok(())
+}
+
+/// Execute `gor workflow disable`.
+///
+/// Disables a workflow.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found or the API request fails.
+fn disable(workflow: &str, repo: Option<&str>, hostname: Option<&str>) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let path = format!(
+        "/repos/{}/{}/actions/workflows/{workflow}/disable",
+        spec.owner, spec.repo
+    );
+
+    let response = client
+        .request("PUT", &path, &[], None)
+        .context("failed to disable workflow")?;
+
+    let status = response.status();
+    if !status.is_success() {
+        anyhow::bail!("failed to disable workflow '{workflow}': HTTP {status}");
+    }
+
+    println!("Workflow '{workflow}' is now disabled.");
+    Ok(())
+}
+
+/// Execute `gor workflow run`.
+///
+/// Triggers a workflow dispatch run.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found or the API request fails.
+fn trigger_workflow_run(
+    workflow: &str,
+    repo: Option<&str>,
+    branch: Option<&str>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let body_value = serde_json::json!({
+        "ref": branch.unwrap_or("main"),
+    });
+    let body_bytes = serde_json::to_vec(&body_value).context("failed to serialize body")?;
+
+    let path = format!(
+        "/repos/{}/{}/actions/workflows/{workflow}/dispatches",
+        spec.owner, spec.repo
+    );
+
+    let response = client
+        .request("POST", &path, &[], Some(body_bytes))
+        .context("failed to trigger workflow run")?;
+
+    let status = response.status();
+    if !status.is_success() {
+        anyhow::bail!("failed to trigger workflow run: HTTP {status}");
+    }
+
+    println!("Workflow run triggered for '{workflow}'.");
+    Ok(())
 }
 
 #[cfg(test)]
