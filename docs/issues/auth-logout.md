@@ -3,7 +3,7 @@ tags: [auth, write]
 priority: P0
 phase: 0
 endpoints: []
-status: todo
+status: done
 blockedBy: [auth-login]
 blocks: []
 ---
@@ -20,7 +20,7 @@ to log out and have my token removed from the OS keyring
 
 ## Acceptance criteria
 
-1. Running `gor auth logout` removes the stored token from the OS keyring
+1. Running `gor auth logout` removes the stored token from `~/.config/gor/hosts.yml`
 2. A confirmation message is displayed on success
 3. `--hostname` flag targets a specific host
 4. If no token exists, a message indicates already logged out

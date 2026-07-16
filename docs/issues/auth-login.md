@@ -6,7 +6,7 @@ endpoints:
   - POST https://github.com/login/device/code
   - POST https://github.com/login/oauth/access_token
   - GET /user
-status: in_progress
+status: done
 blockedBy: []
 blocks: [auth-logout, auth-status, auth-setup-git, api-call, repo-view, repo-list, repo-clone, repo-create, gist-create, gist-list, search-repos, search-code, search-issues, search-commits, extension-install, extension-list, alias-set, alias-list, ssh-key-add, ssh-key-list, gpg-key-add, gpg-key-list, org-list, codespace-create, codespace-list, attestation-verify]
 ---
@@ -37,3 +37,11 @@ to authenticate via the OAuth device flow so that `gor` can act on my behalf
 - Web-based OAuth callback flow
 - GitHub App installation auth
 - Fine-grained PAT creation wizard
+
+## Implementation notes
+
+- Tokens are stored in `~/.config/gor/hosts.yml` (mode 0600) with per-host entries.
+- OS keyring support is available via the `keyring` feature flag (requires dbus-dev on Linux).
+- The file-based store is the default; keyring is an optional enhancement.
+- The OAuth client ID is compiled into the binary (public client for the device flow).
+- Default scopes: `repo,read:org,workflow,gist`.

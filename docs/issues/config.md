@@ -31,7 +31,7 @@ to view and set `gor` configuration values stored in `~/.config/gor/config.yml`
 ## Out of scope
 
 - Deleting a config key (treat as setting to empty or use `gor config set key ""`)
-- Encrypted config values (tokens live in the keyring, not config)
+- Encrypted config values (tokens live in `~/.config/gor/hosts.yml`, not config)
 - Per-repository config overrides (not supported in v1)
 
 ## Implementation

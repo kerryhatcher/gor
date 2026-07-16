@@ -4,7 +4,7 @@ priority: P0
 phase: 0
 endpoints:
   - GET /user
-status: todo
+status: done
 blockedBy: [auth-login]
 blocks: []
 ---
@@ -28,6 +28,12 @@ to check which account I'm authenticated as and whether my token is still valid
 5. `--hostname` flag shows status for a specific host
 6. `--show-token` flag reveals the token value (masked by default)
 7. Exit code 0 if authenticated, non-zero if not
+
+## Implementation notes
+
+- Token scopes and expiration are not yet tracked in the hosts file.
+  These will be added when fine-grained PAT support is implemented.
+- The `--show-token` flag is deferred to a future iteration.
 
 ## Out of scope
 
