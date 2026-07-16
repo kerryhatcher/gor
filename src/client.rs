@@ -216,6 +216,42 @@ impl Client {
             .map_err(GorError::Http)
     }
 
+    /// Make a GraphQL API request.
+    ///
+    /// Sends a POST request to the GraphQL endpoint with the given query
+    /// and optional variables.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP request fails.
+    pub fn graphql(
+        &self,
+        query: &str,
+        variables: Option<serde_json::Value>,
+    ) -> Result<serde_json::Value, GorError> {
+        let url = self.host.api_url("/graphql");
+        let mut body = serde_json::json!({"query": query});
+        if let Some(vars) = variables {
+            body["variables"] = vars;
+        }
+        let mut req = self
+            .http
+            .post(&url)
+            .header("Accept", "application/vnd.github+json")
+            .json(&body);
+        if let Some(token) = &self.token {
+            req = req.header("Authorization", format!("Bearer {token}"));
+        }
+        tracing::debug!("POST {url} (GraphQL)");
+        let response = req.send().map_err(GorError::Http)?;
+        let result: serde_json::Value = response.json().map_err(GorError::Http)?;
+        if let Some(errors) = result.get("errors") {
+            let msg = errors[0]["message"].as_str().unwrap_or("GraphQL error");
+            return Err(GorError::Auth(msg.to_string()));
+        }
+        Ok(result)
+    }
+
     /// Upload a release asset to the given upload URL.
     ///
     /// GitHub release asset uploads use a separate domain (uploads.github.com)

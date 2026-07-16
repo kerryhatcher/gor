@@ -2128,6 +2128,9 @@ pub enum ProjectCommand {
         /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
         #[arg(short = 'R', long, conflicts_with_all = ["org", "owner"])]
         repo: Option<String>,
+        /// Use Projects V2 (GraphQL) instead of classic Projects (REST).
+        #[arg(long)]
+        v2: bool,
         /// Maximum number of projects to show (default: 30).
         #[arg(short = 'L', long, default_value = "30")]
         limit: u32,

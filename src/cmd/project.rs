@@ -21,6 +21,7 @@ pub fn run(cmd: ProjectCommand) -> anyhow::Result<()> {
             org,
             owner,
             repo,
+            v2,
             limit,
             json,
             hostname,
@@ -28,6 +29,7 @@ pub fn run(cmd: ProjectCommand) -> anyhow::Result<()> {
             org.as_deref(),
             owner.as_deref(),
             repo.as_deref(),
+            v2,
             limit,
             json,
             hostname.as_deref(),
@@ -69,12 +71,17 @@ fn list(
     org: Option<&str>,
     owner: Option<&str>,
     repo: Option<&str>,
+    v2: bool,
     limit: u32,
     json: Option<Vec<String>>,
     hostname: Option<&str>,
 ) -> anyhow::Result<()> {
     let host = hostname.unwrap_or("github.com");
     let client = Client::new(host).context("failed to create HTTP client")?;
+
+    if v2 {
+        return list_v2(&client, org, owner, limit, json);
+    }
 
     let path = if let Some(o) = org {
         format!("/orgs/{o}/projects?per_page={}", limit.min(100))
@@ -136,6 +143,71 @@ fn list(
         let visibility = p["visibility"].as_str().unwrap_or("—");
         let title_truncated = crate::cmd::util::truncate(title, 30);
         println!("{number:<8}  {title_truncated:<30}  {state:<10}  {visibility}");
+    }
+
+    Ok(())
+}
+
+/// List Projects V2 using the GraphQL API.
+fn list_v2(
+    client: &Client,
+    org: Option<&str>,
+    owner: Option<&str>,
+    limit: u32,
+    json: Option<Vec<String>>,
+) -> anyhow::Result<()> {
+    let (owner_type, login) = if let Some(o) = org {
+        ("organization", o.to_string())
+    } else if let Some(u) = owner {
+        ("user", u.to_string())
+    } else {
+        anyhow::bail!("specify --org or --owner for Projects V2");
+    };
+
+    let query = format!(
+        r#"{{
+  {owner_type}(login: "{login}") {{
+    projectsV2(first: {limit}) {{
+      nodes {{
+        number
+        title
+        closed
+      }}
+    }}
+  }}
+}}"#
+    );
+
+    let result = client
+        .graphql(&query, None)
+        .context("failed to query Projects V2")?;
+
+    let projects: Vec<serde_json::Value> = result["data"][owner_type]["projectsV2"]["nodes"]
+        .as_array()
+        .map_or_else(Vec::new, Clone::clone);
+
+    if let Some(fields) = json {
+        let fields_ref: Option<&[String]> = if fields.is_empty() {
+            None
+        } else {
+            Some(&fields)
+        };
+        print_json(&projects, fields_ref);
+        return Ok(());
+    }
+
+    if projects.is_empty() {
+        println!("No Projects V2 found.");
+        return Ok(());
+    }
+
+    println!("{:<8}  {:<30}  CLOSED", "NUMBER", "TITLE");
+    for p in &projects {
+        let number = p["number"].as_u64().unwrap_or(0);
+        let title = p["title"].as_str().unwrap_or("—");
+        let closed = p["closed"].as_bool().unwrap_or(false);
+        let title_truncated = crate::cmd::util::truncate(title, 30);
+        println!("{number:<8}  {title_truncated:<30}  {closed}");
     }
 
     Ok(())

@@ -3,7 +3,7 @@ tags: [project, read, write]
 priority: P3
 phase: 4
 endpoints: []
-status: todo
+status: done
 blockedBy: [project-list]
 blocks: []
 ---
