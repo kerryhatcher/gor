@@ -1353,6 +1353,20 @@ pub enum WorkflowCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// View a workflow's details.
+    View {
+        /// Workflow ID, filename (e.g. deploy.yml), or name.
+        workflow: String,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor alias`.

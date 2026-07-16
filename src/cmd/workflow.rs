@@ -23,6 +23,12 @@ pub fn run(cmd: WorkflowCommand) -> anyhow::Result<()> {
             json,
             hostname,
         } => list(repo.as_deref(), limit, json, hostname.as_deref()),
+        WorkflowCommand::View {
+            workflow,
+            repo,
+            json,
+            hostname,
+        } => view(&workflow, repo.as_deref(), json, hostname.as_deref()),
     }
 }
 
@@ -87,6 +93,140 @@ fn list(
     }
 
     print_workflow_table(&workflows);
+    Ok(())
+}
+
+/// Execute `gor workflow view`.
+///
+/// Views a workflow's details and recent runs.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found or the API request fails.
+fn view(
+    workflow: &str,
+    repo: Option<&str>,
+    json: Option<Vec<String>>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Determine if the workflow arg is a numeric ID or a filename/name
+    let path = if workflow.parse::<u64>().is_ok() {
+        format!(
+            "/repos/{}/{}/actions/workflows/{workflow}",
+            spec.owner, spec.repo
+        )
+    } else {
+        // URL-encode the filename: replace / with %2F
+        let encoded = workflow.replace('/', "%2F");
+        format!(
+            "/repos/{}/{}/actions/workflows/{encoded}",
+            spec.owner, spec.repo
+        )
+    };
+
+    let response = client.get(&path).context("failed to fetch workflow")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("workflow '{workflow}' not found in repository '{spec}'");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to view workflow: HTTP {status}");
+    }
+
+    let wf: serde_json::Value = response
+        .json()
+        .context("failed to parse workflow response")?;
+
+    // Fetch recent runs (up to 5)
+    let runs_path = format!(
+        "/repos/{}/{}/actions/workflows/{}/runs?per_page=5",
+        spec.owner, spec.repo, workflow
+    );
+    let runs_response = client.get(&runs_path);
+    let recent_runs: Vec<serde_json::Value> = runs_response.map_or_else(
+        |_| Vec::new(),
+        |resp| {
+            if resp.status().is_success() {
+                resp.json::<serde_json::Value>().map_or_else(
+                    |_| Vec::new(),
+                    |runs_data| {
+                        runs_data["workflow_runs"]
+                            .as_array()
+                            .map_or_else(Vec::new, Clone::clone)
+                    },
+                )
+            } else {
+                Vec::new()
+            }
+        },
+    );
+
+    // --json: output as JSON
+    if let Some(fields) = json {
+        let fields_ref: Option<&[String]> = if fields.is_empty() {
+            None
+        } else {
+            Some(&fields)
+        };
+        print_json(&wf, fields_ref);
+        return Ok(());
+    }
+
+    // Default: print details
+    let name = wf["name"].as_str().unwrap_or("—");
+    let state = wf["state"].as_str().unwrap_or("—");
+    let wf_path = wf["path"].as_str().unwrap_or("—");
+
+    println!("  Name: {name}");
+    println!("  State: {state}");
+    println!("  Path: {wf_path}");
+
+    // Print trigger events
+    if let Some(events) = wf["triggering_events"].as_array() {
+        if !events.is_empty() {
+            println!("  Events:");
+            for event in events {
+                let event_str = serde_json::to_string(event).unwrap_or_default();
+                println!("    - {event_str}");
+            }
+        }
+    }
+
+    // Print recent runs
+    if !recent_runs.is_empty() {
+        println!("  Recent runs:");
+        println!(
+            "    {:<8}  {:<10}  {:<12}  {:<20}  {:<16}",
+            "RUN ID", "STATUS", "CONCLUSION", "BRANCH", "TIMESTAMP"
+        );
+        for run in &recent_runs {
+            let run_id = run["id"].as_u64().unwrap_or(0);
+            let run_status = run["status"].as_str().unwrap_or("—");
+            let conclusion = run["conclusion"].as_str().unwrap_or("—");
+            let branch = run["head_branch"].as_str().unwrap_or("—");
+            let created = run["created_at"]
+                .as_str()
+                .map_or_else(|| "—".to_string(), crate::output::format_date);
+
+            println!(
+                "    {run_id:<8}  {run_status:<10}  {conclusion:<12}  {branch:<20}  {created:<16}",
+            );
+        }
+    }
+
     Ok(())
 }
 

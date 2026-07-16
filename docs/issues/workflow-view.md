@@ -4,7 +4,7 @@ priority: P2
 phase: 2
 endpoints:
   - GET /repos/{owner}/{repo}/actions/workflows/{id}
-status: todo
+status: done
 blockedBy: [workflow-list]
 blocks: [workflow-run, workflow-enable, run-list]
 ---
