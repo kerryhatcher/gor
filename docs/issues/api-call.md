@@ -4,7 +4,7 @@ priority: P0
 phase: 0
 endpoints:
   - "ANY /{path}"
-status: todo
+status: done
 blockedBy: [auth-login]
 blocks: [api-graphql]
 ---
