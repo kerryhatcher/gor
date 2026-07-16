@@ -187,6 +187,50 @@ CI runs on every push and PR. Eight parallel jobs:
 6. **`--json` with field selection.** Not all-or-nothing. Support `--json field1,field2` + `--jq`.
 7. **Config in `~/.config/gor/`.** YAML hosts file (mode 0600), OS keyring for tokens.
 
+## Architecture Decision Records (ADRs)
+
+Major architectural decisions are recorded as ADRs in `docs/adr/` using the [`adrs`](https://joshrotenberg.com/adrs/) CLI tool. The repo is configured for **NextGen mode** (YAML frontmatter) with **MADR 4.0.0 format**.
+
+### When to create an ADR
+
+Create an ADR anytime a major architectural decision is made — library choices, protocol decisions, concurrency models, cross-cutting patterns, or deprecations. Do NOT create ADRs for routine implementation details or decisions already covered by AGENTS.md conventions.
+
+### Quick reference
+
+```bash
+adrs new "Title"                  # Create a new ADR (opens editor)
+adrs new --no-edit "Title"        # Create without editor (for scripting)
+adrs new --supersedes N "Title"   # Supersede an existing ADR
+adrs list                          # List all ADRs
+adrs list -l                       # Detailed list with status and date
+adrs list --status accepted        # Filter by status
+adrs search "query"               # Search all content
+adrs edit N                        # Edit ADR by number
+adrs status N accepted             # Change status
+adrs status N superseded --by M    # Mark as superseded by ADR M
+adrs link N "Relates to" M        # Link two ADRs
+adrs doctor                        # Check ADR health
+adrs generate toc > docs/adr/README.md  # Generate table of contents
+```
+
+### Status lifecycle
+
+```
+proposed → accepted → deprecated → superseded
+                ↓
+            rejected
+```
+
+### Agent workflow
+
+1. When a major architectural decision is made, **pause and create an ADR** before committing code.
+2. Use `--no-edit` to create the ADR, then fill in content directly in the markdown file.
+3. Run `adrs doctor` to validate before committing.
+4. Commit the ADR alongside the implementing code.
+5. If a decision changes, supersede the old ADR — never edit an accepted ADR's decision.
+
+See `.pi/skills/adrs/SKILL.md` for detailed usage.
+
 ---
 
 ## User Stories / Issues
