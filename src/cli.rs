@@ -64,6 +64,9 @@ pub enum Command {
     /// Manage command aliases.
     #[command(subcommand)]
     Alias(AliasCommand),
+    /// Work with GitHub organizations.
+    #[command(subcommand)]
+    Org(OrgCommand),
 }
 
 /// Arguments for `gor api`.
@@ -1360,6 +1363,23 @@ pub enum WorkflowCommand {
         /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
         #[arg(short = 'R', long)]
         repo: Option<String>,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+}
+
+/// Subcommands for `gor org`.
+#[derive(Subcommand, Debug)]
+pub enum OrgCommand {
+    /// List organizations for the authenticated user.
+    List {
+        /// Maximum number of organizations to show (default: 30).
+        #[arg(short = 'L', long, default_value = "30")]
+        limit: u32,
         /// Output as JSON. Optionally specify comma-separated field names.
         #[arg(long, num_args = 0.., value_delimiter = ',')]
         json: Option<Vec<String>>,

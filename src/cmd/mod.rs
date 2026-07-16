@@ -11,6 +11,7 @@ pub mod config;
 pub mod gist;
 pub mod issue;
 pub mod label;
+pub mod org;
 pub mod pr;
 pub mod release;
 pub mod repo;
@@ -41,5 +42,6 @@ pub fn dispatch(args: Args) -> anyhow::Result<()> {
         Command::Search(cmd) => search::run(cmd),
         Command::Workflow(cmd) => workflow::run(cmd),
         Command::Alias(cmd) => alias::run(cmd),
+        Command::Org(cmd) => org::run(cmd),
     }
 }
