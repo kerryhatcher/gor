@@ -112,6 +112,46 @@ impl Client {
         req.send().map_err(GorError::Http)
     }
 
+    /// Make a request with an arbitrary HTTP method, headers, and optional body.
+    ///
+    /// The path should start with `/`, e.g. `/repos/owner/repo`.
+    /// `headers` is a slice of "Key: Value" strings.
+    /// `body` is an optional raw byte vector for the request body.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP request fails.
+    pub fn request(
+        &self,
+        method: &str,
+        path: &str,
+        headers: &[String],
+        body: Option<Vec<u8>>,
+    ) -> Result<reqwest::blocking::Response, GorError> {
+        let url = self.host.api_url(path);
+        let mut req = self
+            .http
+            .request(method.parse().unwrap_or(reqwest::Method::GET), &url)
+            .header("Accept", "application/vnd.github+json");
+
+        if let Some(token) = &self.token {
+            req = req.header("Authorization", format!("Bearer {token}"));
+        }
+
+        for header in headers {
+            if let Some((key, value)) = header.split_once(':') {
+                req = req.header(key.trim(), value.trim());
+            }
+        }
+
+        if let Some(body_bytes) = body {
+            req = req.body(body_bytes);
+        }
+
+        tracing::debug!("{} {url}", method.to_uppercase());
+        req.send().map_err(GorError::Http)
+    }
+
     /// Make a `POST` request to the given API path with a JSON body.
     ///
     /// # Errors

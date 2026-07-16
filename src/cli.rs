@@ -38,9 +38,62 @@ pub enum Command {
     /// Work with GitHub issues.
     #[command(subcommand)]
     Issue(IssueCommand),
+    /// Make an authenticated GitHub API request.
+    Api(ApiCommand),
     /// Manage configuration values.
     #[command(subcommand)]
     Config(ConfigCommand),
+}
+
+/// Arguments for `gor api`.
+#[derive(clap::Args, Debug)]
+pub struct ApiCommand {
+    /// The API endpoint path (e.g. /repos/owner/repo).
+    pub endpoint: String,
+
+    /// HTTP method (default: GET).
+    #[arg(short = 'X', long, default_value = "GET")]
+    pub method: String,
+
+    /// Add a typed field parameter (key=value) for the request body.
+    #[arg(short = 'F', long = "field")]
+    pub fields: Vec<String>,
+
+    /// Add a raw field parameter (key=value) for the request body.
+    #[arg(short = 'f', long = "raw-field")]
+    pub raw_fields: Vec<String>,
+
+    /// Add a custom HTTP header (key: value).
+    #[arg(short = 'H', long = "header")]
+    pub headers: Vec<String>,
+
+    /// Read the request body from a file (use @- for stdin).
+    #[arg(long)]
+    pub input: Option<String>,
+
+    /// Follow Link headers to fetch all pages.
+    #[arg(long)]
+    pub paginate: bool,
+
+    /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+    #[arg(long, env = "GH_HOST")]
+    pub hostname: Option<String>,
+
+    /// Filter JSON output with a jq expression.
+    #[arg(long)]
+    pub jq: Option<String>,
+
+    /// Format output via a Go/Handlebars template.
+    #[arg(long)]
+    pub template: Option<String>,
+
+    /// Suppress status output.
+    #[arg(long)]
+    pub silent: bool,
+
+    /// Include response headers in the output.
+    #[arg(short = 'i', long)]
+    pub include: bool,
 }
 
 /// Subcommands for `gor repo`.
