@@ -4,7 +4,7 @@ priority: P0
 phase: 0
 endpoints:
   - GET /repos/{owner}/{repo}/pulls
-status: todo
+status: done
 blockedBy: [repo-view]
 blocks: [pr-view, pr-create, pr-checkout]
 ---

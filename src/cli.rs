@@ -32,6 +32,9 @@ pub enum Command {
     /// Work with GitHub repositories.
     #[command(subcommand)]
     Repo(RepoCommand),
+    /// Work with GitHub pull requests.
+    #[command(subcommand)]
+    Pr(PrCommand),
     /// Manage configuration values.
     #[command(subcommand)]
     Config(ConfigCommand),
@@ -81,6 +84,46 @@ pub enum AuthCommand {
     /// Show the current authentication status.
     Status {
         /// GitHub hostname (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+}
+
+/// Subcommands for `gor pr`.
+#[derive(Subcommand, Debug)]
+pub enum PrCommand {
+    /// List pull requests in a repository.
+    List {
+        /// Repository to list PRs for (OWNER/REPO format). Auto-detected from git remote if omitted.
+        owner_repo: Option<String>,
+        /// Filter by state: open, closed, merged, or all (default: open).
+        #[arg(long, default_value = "open")]
+        state: String,
+        /// Filter by base branch.
+        #[arg(long)]
+        base: Option<String>,
+        /// Filter by head branch.
+        #[arg(long)]
+        head: Option<String>,
+        /// Filter by PR author login.
+        #[arg(long)]
+        author: Option<String>,
+        /// Filter by label (repeatable).
+        #[arg(long = "label")]
+        labels: Vec<String>,
+        /// Filter by assignee login.
+        #[arg(long)]
+        assignee: Option<String>,
+        /// Maximum number of PRs to show (default: 30).
+        #[arg(short = 'L', long, default_value = "30")]
+        limit: u32,
+        /// Open the PR list in the default browser.
+        #[arg(short = 'w', long)]
+        web: bool,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },

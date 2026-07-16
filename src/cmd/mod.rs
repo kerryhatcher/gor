@@ -5,6 +5,7 @@
 
 pub mod auth;
 pub mod config;
+pub mod pr;
 pub mod repo;
 pub mod util;
 
@@ -20,6 +21,7 @@ pub fn dispatch(args: Args) -> anyhow::Result<()> {
     match args.command {
         Command::Auth(cmd) => auth::run(cmd),
         Command::Repo(cmd) => repo::run(cmd),
+        Command::Pr(cmd) => pr::run(cmd),
         Command::Config(cmd) => config::run(cmd, args.hostname.as_deref()),
     }
 }

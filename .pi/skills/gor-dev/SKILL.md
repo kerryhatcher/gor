@@ -1,9 +1,9 @@
 ---
-name: wrangler
+name: gor-dev
 description: "Use for implementing gor feature stories. When the user says 'work on story X', 'implement X', 'next story', 'work on the next story', or references a story from docs/issues/, use this skill. If no specific story is named, a cheap scout agent determines the next ready story from the backlog. Coordinates cheap worker subagents for rote implementation while the wrangler (you) plans, validates, integrates, and commits. Never implement a story directly — always delegate the bulk coding to workers."
 ---
 
-# Wrangler — Story Implementation Workflow
+# gor-dev — Story Implementation Workflow
 
 Coordinate cheap worker subagents to implement `gor` feature stories. You (the wrangler) plan, validate, integrate, and commit. Workers do the rote coding.
 
