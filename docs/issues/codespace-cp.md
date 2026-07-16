@@ -4,7 +4,7 @@ priority: P2
 phase: 4
 endpoints:
   - POST /user/codespaces/{codespace_name}/exports
-status: todo
+status: done
 blockedBy: [codespace-list]
 blocks: []
 ---

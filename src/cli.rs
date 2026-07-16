@@ -1949,6 +1949,21 @@ pub enum CodespaceCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Copy files between local and remote codespace.
+    Cp {
+        /// Codespace name.
+        name: String,
+        /// Source and destination paths (use `remote:` prefix for codespace paths).
+        /// The last path is the destination, all others are sources.
+        #[arg(required = true)]
+        paths: Vec<String>,
+        /// Recursively copy directories.
+        #[arg(short = 'r', long)]
+        recursive: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor alias`.

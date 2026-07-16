@@ -64,6 +64,12 @@ pub fn run(cmd: CodespaceCommand) -> anyhow::Result<()> {
             all,
             hostname,
         } => stop(name.as_deref(), repo.as_deref(), all, hostname.as_deref()),
+        CodespaceCommand::Cp {
+            name,
+            paths,
+            recursive,
+            hostname,
+        } => cp(&name, &paths, recursive, hostname.as_deref()),
     }
 }
 
@@ -310,6 +316,178 @@ fn ssh(
     }
 
     anyhow::bail!("SSH connection is not yet implemented; use --config to view connection details");
+}
+
+/// Copy files between a local machine and a codespace.
+///
+/// The last path in `paths` is the destination, all others are sources.
+/// Use the `remote:` prefix for codespace paths.
+///
+/// # Errors
+///
+/// Returns an error if the codespace is not running, the paths are invalid,
+/// or the transfer fails.
+fn cp(name: &str, paths: &[String], recursive: bool, hostname: Option<&str>) -> anyhow::Result<()> {
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    if paths.len() < 2 {
+        anyhow::bail!("at least two paths are required: source and destination");
+    }
+
+    let dest = paths
+        .last()
+        .ok_or_else(|| anyhow::anyhow!("paths is empty"))?;
+    let sources = &paths[..paths.len() - 1];
+
+    let dest_is_remote = dest.starts_with("remote:");
+    let any_source_remote = sources.iter().any(|p| p.starts_with("remote:"));
+
+    if dest_is_remote && any_source_remote {
+        anyhow::bail!("copying between two remote paths is not supported");
+    }
+
+    // Fetch codespace details to verify it's running and get connection info.
+    let cs_path = format!("/user/codespaces/{name}");
+    let response = client
+        .get(&cs_path)
+        .context("failed to fetch codespace details")?;
+    let status = response.status();
+    if !status.is_success() {
+        anyhow::bail!("failed to fetch codespace '{name}': HTTP {status}");
+    }
+
+    let cs: serde_json::Value = response
+        .json()
+        .context("failed to parse codespace response")?;
+    let state = cs["state"].as_str().unwrap_or("unknown");
+
+    if state != "Available" {
+        anyhow::bail!(
+            "codespace '{name}' is not available (state: {state}). Start the codespace first."
+        );
+    }
+
+    if dest_is_remote {
+        // Upload: local → remote via SCP
+        let connection = cs["connection"]
+            .as_object()
+            .ok_or_else(|| anyhow::anyhow!("no SSH connection details available for '{name}'"))?;
+
+        let ssh_host = connection["host"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("missing SSH host"))?;
+        let ssh_port = connection["port"]
+            .as_u64()
+            .ok_or_else(|| anyhow::anyhow!("missing SSH port"))?;
+        let ssh_user = connection["user"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("missing SSH user"))?;
+
+        let remote_path = dest
+            .strip_prefix("remote:")
+            .ok_or_else(|| anyhow::anyhow!("invalid remote path"))?;
+
+        for source in sources {
+            if source.starts_with("remote:") {
+                anyhow::bail!("cannot mix remote sources with remote destination");
+            }
+
+            tracing::info!("Uploading {source} to {name}:{remote_path}...");
+
+            let mut cmd = std::process::Command::new("scp");
+            cmd.arg("-P")
+                .arg(ssh_port.to_string())
+                .arg("-o")
+                .arg("LogLevel=ERROR");
+            if recursive {
+                cmd.arg("-r");
+            }
+            cmd.arg(source);
+            cmd.arg(format!("{ssh_user}@{ssh_host}:{remote_path}"));
+
+            let output = cmd
+                .output()
+                .context("failed to run scp; is it installed?")?;
+
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                anyhow::bail!("scp failed for '{source}': {stderr}");
+            }
+
+            tracing::info!("✓ Uploaded {source}");
+        }
+    } else if any_source_remote {
+        // Download: remote → local via export API
+        for source in sources {
+            let remote_path = source
+                .strip_prefix("remote:")
+                .ok_or_else(|| anyhow::anyhow!("invalid remote path: {source}"))?;
+
+            tracing::info!("Downloading {remote_path} from {name}...");
+
+            // Start an export operation
+            let export_body = serde_json::json!({"path": remote_path});
+            let export_response = client
+                .post(&format!("/user/codespaces/{name}/exports"), &export_body)
+                .context("failed to start export")?;
+
+            if !export_response.status().is_success() {
+                let err_body: serde_json::Value = export_response.json().unwrap_or_default();
+                let msg = err_body["message"].as_str().unwrap_or("export failed");
+                anyhow::bail!("failed to export '{remote_path}': {msg}");
+            }
+
+            let export_result: serde_json::Value = export_response
+                .json()
+                .context("failed to parse export response")?;
+
+            // The export API returns a download URL in the `url` field
+            let download_url = export_result["url"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("no download URL in export response"))?;
+
+            // Download the file
+            let file_response = client
+                .get_absolute(download_url)
+                .context("failed to download exported file")?;
+
+            if !file_response.status().is_success() {
+                anyhow::bail!("failed to download file: HTTP {}", file_response.status());
+            }
+
+            let bytes = file_response
+                .bytes()
+                .context("failed to read downloaded file")?;
+
+            // Determine local path: if dest is a directory, use the filename
+            let local_path = if dest.ends_with('/') || dest.ends_with(std::path::MAIN_SEPARATOR_STR)
+            {
+                let filename = std::path::Path::new(remote_path)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("file");
+                std::path::Path::new(dest).join(filename)
+            } else {
+                std::path::PathBuf::from(dest)
+            };
+
+            if let Some(parent) = local_path.parent() {
+                std::fs::create_dir_all(parent).context("failed to create parent directory")?;
+            }
+
+            std::fs::write(&local_path, &bytes).context("failed to write file")?;
+
+            tracing::info!("✓ Downloaded to {}", local_path.display());
+        }
+    } else {
+        // Local to local copy — not supported by this command
+        anyhow::bail!(
+            "at least one path must use the 'remote:' prefix to specify a codespace path"
+        );
+    }
+
+    Ok(())
 }
 
 fn stop(
