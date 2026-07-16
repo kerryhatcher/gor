@@ -4,7 +4,7 @@ priority: P2
 phase: 3
 endpoints:
   - GET /user/keys
-status: todo
+status: done
 blockedBy: [auth-login]
 blocks: []
 

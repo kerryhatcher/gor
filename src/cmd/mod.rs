@@ -10,6 +10,7 @@ pub mod browse;
 pub mod config;
 pub mod gist;
 pub mod issue;
+pub mod keys;
 pub mod label;
 pub mod org;
 pub mod pr;
@@ -43,5 +44,7 @@ pub fn dispatch(args: Args) -> anyhow::Result<()> {
         Command::Workflow(cmd) => workflow::run(cmd),
         Command::Alias(cmd) => alias::run(cmd),
         Command::Org(cmd) => org::run(cmd),
+        Command::SshKey(cmd) => keys::run_ssh(cmd),
+        Command::GpgKey(cmd) => keys::run_gpg(cmd),
     }
 }

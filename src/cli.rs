@@ -67,6 +67,12 @@ pub enum Command {
     /// Work with GitHub organizations.
     #[command(subcommand)]
     Org(OrgCommand),
+    /// Manage SSH keys.
+    #[command(subcommand)]
+    SshKey(SshKeyCommand),
+    /// Manage GPG keys.
+    #[command(subcommand)]
+    GpgKey(GpgKeyCommand),
 }
 
 /// Arguments for `gor api`.
@@ -1383,6 +1389,61 @@ pub enum OrgCommand {
         /// Output as JSON. Optionally specify comma-separated field names.
         #[arg(long, num_args = 0.., value_delimiter = ',')]
         json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+}
+
+/// Subcommands for `gor ssh-key`.
+#[derive(Subcommand, Debug)]
+pub enum SshKeyCommand {
+    /// List SSH keys.
+    List {
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Add an SSH key.
+    Add {
+        /// Title for the key.
+        #[arg(short = 't', long)]
+        title: String,
+        /// Read the public key from a file.
+        #[arg(short = 'f', long)]
+        file: Option<String>,
+        /// Provide the public key inline.
+        #[arg(short = 'b', long)]
+        body: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+}
+
+/// Subcommands for `gor gpg-key`.
+#[derive(Subcommand, Debug)]
+pub enum GpgKeyCommand {
+    /// List GPG keys.
+    List {
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Add a GPG key.
+    Add {
+        /// Read the armored public key from a file.
+        #[arg(short = 'f', long)]
+        file: Option<String>,
+        /// Provide the armored key inline.
+        #[arg(short = 'b', long)]
+        body: Option<String>,
         /// GitHub hostname for GitHub Enterprise Server (default: github.com).
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
