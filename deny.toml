@@ -22,6 +22,11 @@ unsound = "all"
 # Warn on yanked crates; resolve by upgrading.
 yanked = "warn"
 # Temporary waivers go here, e.g. `RUSTSEC-2024-XXXX = "reason"`. Leave empty by default.
+ignore = [
+    # number_prefix is unmaintained but is a transitive dep of indicatif.
+    # indicatif 0.18 will remove this dependency. Track: RUSTSEC-2025-0119
+    "RUSTSEC-2025-0119",
+]
 
 [licenses]
 # Minimum confidence for license detection (0.0–1.0).
