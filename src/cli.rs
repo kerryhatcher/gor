@@ -143,6 +143,12 @@ pub enum AuthCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Configure git to use gor as a credential helper.
+    SetupGit {
+        /// GitHub hostname (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor pr`.

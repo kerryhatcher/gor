@@ -8,6 +8,7 @@ use crate::auth::{device, token};
 use crate::cli::AuthCommand;
 use crate::client::Client;
 use crate::host::Host;
+use anyhow::Context;
 
 /// Run the `gor auth` subcommand.
 ///
@@ -28,7 +29,95 @@ pub fn run(cmd: AuthCommand) -> anyhow::Result<()> {
         ),
         AuthCommand::Logout { hostname } => logout(hostname.as_deref().unwrap_or("github.com")),
         AuthCommand::Status { hostname } => status(hostname.as_deref().unwrap_or("github.com")),
+        AuthCommand::SetupGit { hostname } => {
+            setup_git(hostname.as_deref().unwrap_or("github.com"))
+        }
     }
+}
+
+/// Configure git to use gor as a credential helper for HTTPS.
+///
+/// Writes `credential.https://<host>.helper` and `credential.helper`
+/// git config entries that invoke `gor auth git-credential`.
+///
+/// # Errors
+///
+/// Returns an error if git config commands fail.
+fn setup_git(hostname: &str) -> anyhow::Result<()> {
+    use std::process::Command;
+
+    let helper_value = "!gor auth git-credential";
+    let cred_key = format!("credential.https://{hostname}.helper");
+
+    // Check if gor is already configured for this host
+    let existing = Command::new("git")
+        .args(["config", "--global", "--get", &cred_key])
+        .output()
+        .ok();
+
+    let already_configured = existing.as_ref().is_some_and(|o| {
+        o.status.success() && String::from_utf8_lossy(&o.stdout).trim() == helper_value
+    });
+
+    if already_configured {
+        println!("git is already configured to use gor for {hostname} credentials");
+        return Ok(());
+    }
+
+    // Check if a non-gor credential helper exists for this host
+    let has_existing = existing.as_ref().is_some_and(|o| {
+        o.status.success() && !String::from_utf8_lossy(&o.stdout).trim().is_empty()
+    });
+
+    if has_existing {
+        // Preserve existing non-gor helper by using --add
+        println!("$ git config --global --add {cred_key} {helper_value}");
+        let output = Command::new("git")
+            .args(["config", "--global", "--add", &cred_key, helper_value])
+            .output()
+            .context("failed to run git config --add")?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("git config failed: {stderr}");
+        }
+    } else {
+        // Set the credential helper for the specific host
+        println!("$ git config --global {cred_key} {helper_value}");
+        let output = Command::new("git")
+            .args(["config", "--global", &cred_key, helper_value])
+            .output()
+            .context("failed to run git config")?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("git config failed: {stderr}");
+        }
+    }
+
+    // Also set the generic credential.helper if not already set
+    let generic_key = "credential.helper";
+    let generic_existing = Command::new("git")
+        .args(["config", "--global", "--get", generic_key])
+        .output()
+        .ok();
+
+    let has_generic = generic_existing.as_ref().is_some_and(|o| {
+        o.status.success() && !String::from_utf8_lossy(&o.stdout).trim().is_empty()
+    });
+
+    if !has_generic {
+        println!("$ git config --global {generic_key} {helper_value}");
+        let output = Command::new("git")
+            .args(["config", "--global", generic_key, helper_value])
+            .output()
+            .context("failed to run git config")?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("git config failed: {stderr}");
+        }
+    }
+
+    println!("✓ git is now configured to use gor for {hostname} credentials");
+    Ok(())
 }
 
 /// Log in to a GitHub account using the OAuth device flow.
