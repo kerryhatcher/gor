@@ -100,6 +100,11 @@ pub enum Command {
     /// Verify artifact attestations.
     #[command(subcommand)]
     Attestation(AttestationCommand),
+    /// Generate shell completion scripts.
+    Completion {
+        /// Shell type: bash, zsh, fish, or powershell.
+        shell: String,
+    },
 }
 
 /// Arguments for `gor api`.

@@ -3,7 +3,7 @@ tags: [completion, shell]
 priority: P2
 phase: 4
 endpoints: []
-status: todo
+status: done
 blockedBy: []
 blocks: []
 ---
