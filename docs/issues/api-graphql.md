@@ -4,7 +4,7 @@ priority: P2
 phase: 4
 endpoints:
   - POST /graphql
-status: todo
+status: done
 blockedBy: [api-call]
 blocks: []
 ---

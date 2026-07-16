@@ -1,10 +1,11 @@
 //! Implementation of the `gor api` subcommand.
 //!
-//! Provides arbitrary REST API calls to GitHub endpoints.
+//! Provides arbitrary REST API calls to GitHub endpoints
+//! and GraphQL API queries.
 //! Supports GET, POST, PUT, PATCH, DELETE methods with custom headers,
 //! body input, pagination, and JSON output.
 
-#![allow(clippy::print_stdout)]
+#![allow(clippy::print_stdout, clippy::print_stderr)]
 
 use crate::cli::ApiCommand;
 use crate::client::Client;
@@ -18,73 +19,271 @@ use std::io::Read;
 ///
 /// Returns an error if the command execution fails.
 pub fn run(cmd: &ApiCommand, global_hostname: Option<&str>) -> anyhow::Result<()> {
-    let host = cmd
-        .hostname
-        .as_deref()
-        .or(global_hostname)
-        .unwrap_or("github.com");
+    match cmd {
+        ApiCommand::Rest {
+            endpoint,
+            method,
+            fields,
+            raw_fields,
+            headers,
+            input,
+            paginate,
+            hostname,
+            jq,
+            template,
+            silent,
+            include,
+        } => run_rest(
+            endpoint,
+            method,
+            fields,
+            raw_fields,
+            headers,
+            input.as_deref(),
+            *paginate,
+            hostname.as_deref(),
+            jq.as_deref(),
+            template.as_deref(),
+            *silent,
+            *include,
+            global_hostname,
+        ),
+        ApiCommand::Graphql {
+            query,
+            fields,
+            hostname,
+            jq,
+            template,
+        } => run_graphql(
+            query.as_deref(),
+            fields,
+            hostname.as_deref(),
+            jq.as_deref(),
+            template.as_deref(),
+            global_hostname,
+        ),
+    }
+}
+
+/// Execute a REST API request.
+///
+/// # Errors
+///
+/// Returns an error if the HTTP request fails or the response cannot be read.
+#[allow(clippy::too_many_arguments)]
+fn run_rest(
+    endpoint: &str,
+    method: &str,
+    fields: &[String],
+    raw_fields: &[String],
+    headers: &[String],
+    input: Option<&str>,
+    paginate: bool,
+    hostname: Option<&str>,
+    jq: Option<&str>,
+    template: Option<&str>,
+    silent: bool,
+    include: bool,
+    global_hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let host = hostname.or(global_hostname).unwrap_or("github.com");
 
     let client = Client::new(host).context("failed to create HTTP client")?;
 
-    let method = if cmd.method.is_empty() {
+    let method = if method.is_empty() {
         "GET".to_string()
     } else {
-        cmd.method.to_uppercase()
+        method.to_uppercase()
     };
 
     // Build the endpoint path
-    let endpoint = if cmd.endpoint.starts_with('/') {
-        cmd.endpoint.clone()
+    let endpoint = if endpoint.starts_with('/') {
+        endpoint.to_string()
     } else {
-        format!("/{}", cmd.endpoint)
+        format!("/{endpoint}")
     };
 
     // Build the request body
-    let body = build_body(cmd).context("failed to build request body")?;
+    let body = build_body(fields, raw_fields, input).context("failed to build request body")?;
 
     // Make the request
     let response = client
-        .request(&method, &endpoint, &cmd.headers, body)
+        .request(&method, &endpoint, headers, body)
         .with_context(|| format!("failed to make {method} request to {endpoint}"))?;
 
     let status = response.status();
-    let headers = response.headers().clone();
+    let response_headers = response.headers().clone();
 
     // Read the response body
     let response_body = response.text().context("failed to read response body")?;
 
     // Handle pagination
-    if cmd.paginate && status.is_success() {
+    if paginate && status.is_success() {
         let all_bodies = collect_paginated(
             &client,
             &method,
             &endpoint,
-            &cmd.headers,
+            headers,
             &response_body,
-            &headers,
+            &response_headers,
         )
         .context("failed to collect paginated results")?;
-        print_output(cmd, status, &headers, &all_bodies, true);
+        print_output(
+            include,
+            silent,
+            jq,
+            template,
+            status,
+            &response_headers,
+            &all_bodies,
+            true,
+        );
     } else {
-        print_output(cmd, status, &headers, &response_body, false);
+        print_output(
+            include,
+            silent,
+            jq,
+            template,
+            status,
+            &response_headers,
+            &response_body,
+            false,
+        );
     }
 
     Ok(())
 }
 
+/// Execute a GraphQL API request.
+///
+/// # Errors
+///
+/// Returns an error if the HTTP request fails or the response indicates
+/// GraphQL-level errors.
+fn run_graphql(
+    query: Option<&str>,
+    fields: &[String],
+    hostname: Option<&str>,
+    jq: Option<&str>,
+    template: Option<&str>,
+    global_hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let host = hostname.or(global_hostname).unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Read query from --query flag or stdin
+    let query_str = if let Some(q) = query {
+        q.to_string()
+    } else {
+        let mut buf = String::new();
+        std::io::stdin()
+            .read_to_string(&mut buf)
+            .context("failed to read GraphQL query from stdin")?;
+        if buf.trim().is_empty() {
+            anyhow::bail!("no GraphQL query provided (use --query or pipe via stdin)");
+        }
+        buf
+    };
+
+    // Build variables JSON
+    let variables = build_graphql_variables(fields)?;
+
+    // Build the GraphQL request body
+    let body = serde_json::json!({
+        "query": query_str,
+        "variables": variables,
+    });
+
+    let body_bytes = serde_json::to_vec(&body).context("failed to serialize GraphQL body")?;
+
+    let response = client
+        .request("POST", "/graphql", &[], Some(body_bytes))
+        .context("failed to make GraphQL request")?;
+
+    let _status = response.status();
+    let response_body = response.text().context("failed to read response body")?;
+
+    // Parse and check for GraphQL errors
+    let parsed: serde_json::Value =
+        serde_json::from_str(&response_body).context("failed to parse GraphQL response")?;
+
+    if let Some(errors) = parsed.get("errors") {
+        if let Some(err_array) = errors.as_array() {
+            for err in err_array {
+                let msg = err
+                    .get("message")
+                    .and_then(|m| m.as_str())
+                    .unwrap_or("unknown error");
+                let path = err
+                    .get("path")
+                    .and_then(|p| serde_json::to_string(p).ok())
+                    .unwrap_or_default();
+                eprintln!("GraphQL error: {msg} (path: {path})");
+            }
+        }
+        // Exit non-zero on GraphQL errors
+        std::process::exit(1);
+    }
+
+    // Handle --jq
+    if jq.is_some() {
+        tracing::warn!("jq support requires the `jaq` feature; falling back to raw JSON output");
+    }
+
+    // Handle --template
+    if template.is_some() {
+        tracing::warn!("template support is not yet implemented; falling back to raw JSON output");
+    }
+
+    // Pretty-print the response
+    if let Ok(pretty) = serde_json::to_string_pretty(&parsed) {
+        println!("{pretty}");
+    } else {
+        println!("{response_body}");
+    }
+
+    Ok(())
+}
+
+/// Build a JSON object from key=value field pairs for GraphQL variables.
+///
+/// Each field is parsed as JSON if possible, otherwise treated as a string.
+///
+/// # Errors
+///
+/// Returns an error if a field is not in `key=value` format.
+fn build_graphql_variables(fields: &[String]) -> anyhow::Result<serde_json::Value> {
+    let mut map = serde_json::Map::new();
+    for field in fields {
+        if let Some((key, value)) = field.split_once('=') {
+            // Try to parse as JSON first, fall back to string
+            let json_value = serde_json::from_str::<serde_json::Value>(value)
+                .unwrap_or_else(|_| serde_json::Value::String(value.to_string()));
+            map.insert(key.to_string(), json_value);
+        } else {
+            anyhow::bail!("invalid field format: '{field}' (expected key=value)");
+        }
+    }
+    Ok(serde_json::Value::Object(map))
+}
+
 /// Build the request body from the command arguments.
 ///
 /// Priority: --input > --field > --raw-field
-fn build_body(cmd: &ApiCommand) -> anyhow::Result<Option<Vec<u8>>> {
+fn build_body(
+    fields: &[String],
+    raw_fields: &[String],
+    input: Option<&str>,
+) -> anyhow::Result<Option<Vec<u8>>> {
     // --input takes precedence
-    if let Some(input) = &cmd.input {
+    if let Some(input) = input {
         return read_input(input).map(Some);
     }
 
     // --field / -F: URL-encoded form fields
-    if !cmd.fields.is_empty() {
+    if !fields.is_empty() {
         let mut parts: Vec<String> = Vec::new();
-        for field in &cmd.fields {
+        for field in fields {
             if let Some((key, value)) = field.split_once('=') {
                 let encoded_key = urlencode(key);
                 let encoded_value = urlencode(value);
@@ -98,9 +297,9 @@ fn build_body(cmd: &ApiCommand) -> anyhow::Result<Option<Vec<u8>>> {
     }
 
     // --raw-field / -f: raw (non-URL-encoded) form fields
-    if !cmd.raw_fields.is_empty() {
+    if !raw_fields.is_empty() {
         let mut parts: Vec<String> = Vec::new();
-        for field in &cmd.raw_fields {
+        for field in raw_fields {
             if let Some((key, value)) = field.split_once('=') {
                 parts.push(format!("{key}={value}"));
             } else {
@@ -254,15 +453,19 @@ fn extract_path_from_url(url: &str) -> String {
 /// Print the output based on command flags.
 ///
 /// Handles `--include`, `--jq`, `--template`, `--silent`, and default output.
+#[allow(clippy::too_many_arguments)]
 fn print_output(
-    cmd: &ApiCommand,
+    include: bool,
+    silent: bool,
+    jq: Option<&str>,
+    template: Option<&str>,
     status: reqwest::StatusCode,
     headers: &reqwest::header::HeaderMap,
     body: &str,
     is_paginated: bool,
 ) {
     // --include / -i: print response headers
-    if cmd.include {
+    if include {
         println!(
             "HTTP/1.1 {} {}",
             status.as_u16(),
@@ -277,7 +480,7 @@ fn print_output(
     }
 
     // --silent: suppress status output
-    if !cmd.silent && !cmd.include {
+    if !silent && !include {
         if status.is_success() {
             if is_paginated {
                 println!("HTTP {} (paginated)", status.as_u16());
@@ -290,7 +493,7 @@ fn print_output(
     }
 
     // --jq: filter through jq expression
-    if let Some(_expr) = &cmd.jq {
+    if jq.is_some() {
         // jaq is not yet a dependency; print message and fall back to raw JSON
         tracing::warn!("jq support requires the `jaq` feature; falling back to raw JSON output");
         print_body(body);
@@ -298,7 +501,7 @@ fn print_output(
     }
 
     // --template: format via template
-    if cmd.template.is_some() {
+    if template.is_some() {
         tracing::warn!("template support is not yet implemented; falling back to raw JSON output");
         print_body(body);
         return;
@@ -328,41 +531,14 @@ mod tests {
 
     #[test]
     fn build_body_no_input() {
-        let cmd = ApiCommand {
-            endpoint: "/test".to_string(),
-            method: "GET".to_string(),
-            fields: vec![],
-            raw_fields: vec![],
-            headers: vec![],
-            input: None,
-            paginate: false,
-            hostname: None,
-            jq: None,
-            template: None,
-            silent: false,
-            include: false,
-        };
-        let body = build_body(&cmd).expect("build_body should succeed");
+        let body = build_body(&[], &[], None).expect("build_body should succeed");
         assert!(body.is_none());
     }
 
     #[test]
     fn build_body_with_fields() {
-        let cmd = ApiCommand {
-            endpoint: "/test".to_string(),
-            method: "POST".to_string(),
-            fields: vec!["name=hello".to_string(), "count=42".to_string()],
-            raw_fields: vec![],
-            headers: vec![],
-            input: None,
-            paginate: false,
-            hostname: None,
-            jq: None,
-            template: None,
-            silent: false,
-            include: false,
-        };
-        let body = build_body(&cmd).expect("build_body should succeed");
+        let fields = vec!["name=hello".to_string(), "count=42".to_string()];
+        let body = build_body(&fields, &[], None).expect("build_body should succeed");
         let body_str = String::from_utf8(body.expect("body should be Some")).expect("valid utf8");
         assert!(body_str.contains("name=hello") || body_str.contains("name=hello"));
         assert!(body_str.contains("count=42"));
@@ -370,21 +546,8 @@ mod tests {
 
     #[test]
     fn build_body_with_raw_fields() {
-        let cmd = ApiCommand {
-            endpoint: "/test".to_string(),
-            method: "POST".to_string(),
-            fields: vec![],
-            raw_fields: vec!["key=value".to_string(), "json=[1,2,3]".to_string()],
-            headers: vec![],
-            input: None,
-            paginate: false,
-            hostname: None,
-            jq: None,
-            template: None,
-            silent: false,
-            include: false,
-        };
-        let body = build_body(&cmd).expect("build_body should succeed");
+        let raw_fields = vec!["key=value".to_string(), "json=[1,2,3]".to_string()];
+        let body = build_body(&[], &raw_fields, None).expect("build_body should succeed");
         let body_str = String::from_utf8(body.expect("body should be Some")).expect("valid utf8");
         assert!(body_str.contains("key=value"));
         assert!(body_str.contains("json=[1,2,3]"));
@@ -392,42 +555,17 @@ mod tests {
 
     #[test]
     fn build_body_input_takes_precedence() {
-        let cmd = ApiCommand {
-            endpoint: "/test".to_string(),
-            method: "POST".to_string(),
-            fields: vec!["should=notappear".to_string()],
-            raw_fields: vec![],
-            headers: vec![],
-            input: Some("@-".to_string()),
-            paginate: false,
-            hostname: None,
-            jq: None,
-            template: None,
-            silent: false,
-            include: false,
-        };
+        // input takes precedence; verify by checking logic path
+        let input = Some("@-");
         // This would try to read from stdin, which is not available in tests.
         // Just verify that input takes precedence by checking the logic path.
-        assert!(cmd.input.is_some());
+        assert!(input.is_some());
     }
 
     #[test]
     fn build_body_field_without_value() {
-        let cmd = ApiCommand {
-            endpoint: "/test".to_string(),
-            method: "POST".to_string(),
-            fields: vec!["flag".to_string()],
-            raw_fields: vec![],
-            headers: vec![],
-            input: None,
-            paginate: false,
-            hostname: None,
-            jq: None,
-            template: None,
-            silent: false,
-            include: false,
-        };
-        let body = build_body(&cmd).expect("build_body should succeed");
+        let fields = vec!["flag".to_string()];
+        let body = build_body(&fields, &[], None).expect("build_body should succeed");
         let body_str = String::from_utf8(body.expect("body should be Some")).expect("valid utf8");
         assert_eq!(body_str, "flag=");
     }
@@ -528,5 +666,36 @@ mod tests {
     fn print_body_empty() {
         // Should not panic with empty string
         print_body("");
+    }
+
+    #[test]
+    fn build_graphql_variables_basic() {
+        let fields = vec!["name=hello".to_string(), "count=42".to_string()];
+        let vars = build_graphql_variables(&fields).expect("should succeed");
+        let obj = vars.as_object().expect("should be an object");
+        assert_eq!(obj.get("name").and_then(|v| v.as_str()), Some("hello"));
+        // 42 should be parsed as JSON number
+        assert_eq!(
+            obj.get("count").and_then(serde_json::Value::as_i64),
+            Some(42)
+        );
+    }
+
+    #[test]
+    fn build_graphql_variables_json_value() {
+        let fields = vec!["data={\"n\":5}".to_string()];
+        let vars = build_graphql_variables(&fields).expect("should succeed");
+        let obj = vars.as_object().expect("should be an object");
+        let data = obj.get("data").expect("data field");
+        assert_eq!(data.get("n").and_then(serde_json::Value::as_i64), Some(5));
+    }
+
+    #[test]
+    fn build_graphql_variables_invalid_format() {
+        let fields = vec!["noequal".to_string()];
+        let result = build_graphql_variables(&fields);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("invalid field format"));
     }
 }

@@ -39,6 +39,7 @@ pub enum Command {
     #[command(subcommand)]
     Issue(IssueCommand),
     /// Make an authenticated GitHub API request.
+    #[command(subcommand)]
     Api(ApiCommand),
     /// Manage configuration values.
     #[command(subcommand)]
@@ -66,54 +67,79 @@ pub enum Command {
 }
 
 /// Arguments for `gor api`.
-#[derive(clap::Args, Debug)]
-pub struct ApiCommand {
-    /// The API endpoint path (e.g. /repos/owner/repo).
-    pub endpoint: String,
+#[derive(clap::Subcommand, Debug)]
+pub enum ApiCommand {
+    /// Make a REST API request to a GitHub endpoint.
+    Rest {
+        /// The API endpoint path (e.g. /repos/owner/repo).
+        endpoint: String,
 
-    /// HTTP method (default: GET).
-    #[arg(short = 'X', long, default_value = "GET")]
-    pub method: String,
+        /// HTTP method (default: GET).
+        #[arg(short = 'X', long, default_value = "GET")]
+        method: String,
 
-    /// Add a typed field parameter (key=value) for the request body.
-    #[arg(short = 'F', long = "field")]
-    pub fields: Vec<String>,
+        /// Add a typed field parameter (key=value) for the request body.
+        #[arg(short = 'F', long = "field")]
+        fields: Vec<String>,
 
-    /// Add a raw field parameter (key=value) for the request body.
-    #[arg(short = 'f', long = "raw-field")]
-    pub raw_fields: Vec<String>,
+        /// Add a raw field parameter (key=value) for the request body.
+        #[arg(short = 'f', long = "raw-field")]
+        raw_fields: Vec<String>,
 
-    /// Add a custom HTTP header (key: value).
-    #[arg(short = 'H', long = "header")]
-    pub headers: Vec<String>,
+        /// Add a custom HTTP header (key: value).
+        #[arg(short = 'H', long = "header")]
+        headers: Vec<String>,
 
-    /// Read the request body from a file (use @- for stdin).
-    #[arg(long)]
-    pub input: Option<String>,
+        /// Read the request body from a file (use @- for stdin).
+        #[arg(long)]
+        input: Option<String>,
 
-    /// Follow Link headers to fetch all pages.
-    #[arg(long)]
-    pub paginate: bool,
+        /// Follow Link headers to fetch all pages.
+        #[arg(long)]
+        paginate: bool,
 
-    /// GitHub hostname for GitHub Enterprise Server (default: github.com).
-    #[arg(long, env = "GH_HOST")]
-    pub hostname: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
 
-    /// Filter JSON output with a jq expression.
-    #[arg(long)]
-    pub jq: Option<String>,
+        /// Filter JSON output with a jq expression.
+        #[arg(long)]
+        jq: Option<String>,
 
-    /// Format output via a Go/Handlebars template.
-    #[arg(long)]
-    pub template: Option<String>,
+        /// Format output via a Go/Handlebars template.
+        #[arg(long)]
+        template: Option<String>,
 
-    /// Suppress status output.
-    #[arg(long)]
-    pub silent: bool,
+        /// Suppress status output.
+        #[arg(long)]
+        silent: bool,
 
-    /// Include response headers in the output.
-    #[arg(short = 'i', long)]
-    pub include: bool,
+        /// Include response headers in the output.
+        #[arg(short = 'i', long)]
+        include: bool,
+    },
+    /// Make a GraphQL API request.
+    Graphql {
+        /// The GraphQL query string. Reads from stdin if omitted.
+        #[arg(short = 'q', long = "query")]
+        query: Option<String>,
+
+        /// GraphQL variables as key=value pairs (repeatable).
+        #[arg(short = 'F', long = "field")]
+        fields: Vec<String>,
+
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+
+        /// Filter JSON output with a jq expression.
+        #[arg(long)]
+        jq: Option<String>,
+
+        /// Format output via a Go/Handlebars template.
+        #[arg(long)]
+        template: Option<String>,
+    },
 }
 
 /// Subcommands for `gor repo`.
