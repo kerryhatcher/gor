@@ -10,6 +10,7 @@ use crate::client::Client;
 use crate::output::{format_date, print_json};
 use crate::repository::{detect_remote, parse_repo_spec};
 use anyhow::Context;
+use std::io::Write;
 
 /// Run the `gor release` subcommand.
 ///
@@ -74,6 +75,21 @@ pub fn run(cmd: ReleaseCommand) -> anyhow::Result<()> {
             prerelease,
             tag.as_deref(),
             target.as_deref(),
+            hostname.as_deref(),
+        ),
+        ReleaseCommand::Upload {
+            release,
+            files,
+            repo,
+            name,
+            mime_type,
+            hostname,
+        } => upload(
+            &release,
+            &files,
+            repo.as_deref(),
+            name.as_deref(),
+            mime_type.as_deref(),
             hostname.as_deref(),
         ),
     }
@@ -315,7 +331,6 @@ fn delete(
 
     // Confirmation prompt
     if !yes {
-        use std::io::Write;
         print!("Delete release '{tag_name}' (ID: {release_id}) from '{spec}'? [y/N] ");
         std::io::stdout().flush().ok();
         let mut input = String::new();
@@ -499,6 +514,149 @@ fn edit(
     let html_url = updated["html_url"].as_str().unwrap_or("(unknown URL)");
     println!("✓ Release updated: {html_url}");
     Ok(())
+}
+
+/// Execute `gor release upload`.
+///
+/// Uploads one or more asset files to an existing release. Auto-detects
+/// MIME types from file extensions, with optional override.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the release does not
+/// exist, a file cannot be read, or the upload fails.
+fn upload(
+    release: &str,
+    files: &[String],
+    repo: Option<&str>,
+    name: Option<&str>,
+    mime_type: Option<&str>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    if files.is_empty() {
+        anyhow::bail!("no files specified for upload");
+    }
+
+    if name.is_some() && files.len() > 1 {
+        anyhow::bail!("--name can only be used with a single file upload");
+    }
+
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Resolve the release to get its upload URL
+    let (release_id, tag_name) = resolve_release(&client, &spec.owner, &spec.repo, release)?;
+
+    // Fetch the full release to get the upload_url
+    let get_path = format!("/repos/{}/{}/releases/{release_id}", spec.owner, spec.repo);
+    let resp = client.get(&get_path).context("failed to fetch release")?;
+    let release_data: serde_json::Value =
+        resp.json().context("failed to parse release response")?;
+    let upload_url_template = release_data["upload_url"]
+        .as_str()
+        .context("release response missing 'upload_url'")?;
+
+    for file_path in files {
+        let file_name = name.unwrap_or_else(|| {
+            std::path::Path::new(file_path)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or(file_path)
+        });
+
+        // Read the file
+        let file_data = std::fs::read(file_path)
+            .with_context(|| format!("failed to read file: {file_path}"))?;
+        let file_size = file_data.len();
+
+        // Determine MIME type
+        let content_type = mime_type.map_or_else(|| detect_mime_type(file_name), String::from);
+
+        // Build the upload URL (replace {?name,label} with ?name=...)
+        let upload_url =
+            upload_url_template.replace("{?name,label}", &format!("?name={file_name}"));
+
+        // Upload the asset
+        print!(
+            "Uploading {file_name} ({}) ... ",
+            format_size(file_size as u64)
+        );
+        std::io::stdout().flush().ok();
+
+        let response = client
+            .upload_asset(&upload_url, &file_data, &content_type)
+            .with_context(|| format!("failed to upload {file_name}"))?;
+
+        let status = response.status();
+        if status == reqwest::StatusCode::UNPROCESSABLE_ENTITY {
+            anyhow::bail!(
+                "asset '{file_name}' already exists on release '{tag_name}'; use a different name or delete the existing asset first"
+            );
+        }
+        if !status.is_success() {
+            let err_body: serde_json::Value = response.json().unwrap_or_default();
+            let msg = err_body["message"].as_str().unwrap_or("upload failed");
+            anyhow::bail!("failed to upload '{file_name}': {msg}");
+        }
+
+        let asset: serde_json::Value = response.json().context("failed to parse asset response")?;
+        let asset_url = asset["browser_download_url"]
+            .as_str()
+            .unwrap_or("(unknown URL)");
+
+        println!("done");
+        println!("{asset_url}");
+    }
+
+    Ok(())
+}
+
+/// Detect MIME type from a file extension.
+fn detect_mime_type(filename: &str) -> String {
+    let ext = std::path::Path::new(filename)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    match ext.as_str() {
+        "zip" => "application/zip".to_string(),
+        "tar" => "application/x-tar".to_string(),
+        "gz" | "tgz" => "application/gzip".to_string(),
+        "bz2" => "application/x-bzip2".to_string(),
+        "xz" => "application/x-xz".to_string(),
+        "dmg" => "application/x-apple-diskimage".to_string(),
+        "deb" => "application/vnd.debian.binary-package".to_string(),
+        "rpm" => "application/x-rpm".to_string(),
+        "msi" => "application/x-msi".to_string(),
+        "exe" => "application/x-msdownload".to_string(),
+        "apk" => "application/vnd.android.package-archive".to_string(),
+        "jar" => "application/java-archive".to_string(),
+        "txt" => "text/plain".to_string(),
+        "md" => "text/markdown".to_string(),
+        "json" => "application/json".to_string(),
+        "xml" => "application/xml".to_string(),
+        "html" => "text/html".to_string(),
+        "css" => "text/css".to_string(),
+        "js" => "application/javascript".to_string(),
+        "wasm" => "application/wasm".to_string(),
+        "png" => "image/png".to_string(),
+        "jpg" | "jpeg" => "image/jpeg".to_string(),
+        "gif" => "image/gif".to_string(),
+        "svg" => "image/svg+xml".to_string(),
+        "ico" => "image/x-icon".to_string(),
+        "pdf" => "application/pdf".to_string(),
+        _ => "application/octet-stream".to_string(),
+    }
 }
 
 /// Print a formatted single-release view.
@@ -737,5 +895,29 @@ mod tests {
     fn open_in_browser_does_not_panic() {
         // This should not panic even if no browser is available
         open_in_browser("https://example.com");
+    }
+
+    #[test]
+    fn detect_mime_type_common() {
+        assert_eq!(detect_mime_type("app.zip"), "application/zip");
+        assert_eq!(detect_mime_type("app.tar.gz"), "application/gzip");
+        assert_eq!(detect_mime_type("app.dmg"), "application/x-apple-diskimage");
+        assert_eq!(
+            detect_mime_type("app.deb"),
+            "application/vnd.debian.binary-package"
+        );
+        assert_eq!(detect_mime_type("app.msi"), "application/x-msi");
+        assert_eq!(detect_mime_type("app.exe"), "application/x-msdownload");
+        assert_eq!(detect_mime_type("app.txt"), "text/plain");
+        assert_eq!(detect_mime_type("app.json"), "application/json");
+        assert_eq!(detect_mime_type("app.png"), "image/png");
+        assert_eq!(detect_mime_type("app.jpg"), "image/jpeg");
+        assert_eq!(detect_mime_type("app.pdf"), "application/pdf");
+    }
+
+    #[test]
+    fn detect_mime_type_unknown() {
+        assert_eq!(detect_mime_type("app.xyz"), "application/octet-stream");
+        assert_eq!(detect_mime_type("app"), "application/octet-stream");
     }
 }

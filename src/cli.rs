@@ -821,4 +821,23 @@ pub enum ReleaseCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Upload assets to a release.
+    Upload {
+        /// Tag name or release ID.
+        release: String,
+        /// Asset files to upload.
+        files: Vec<String>,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Override the asset name (only meaningful for a single asset upload).
+        #[arg(long)]
+        name: Option<String>,
+        /// Override the auto-detected MIME type.
+        #[arg(long = "mime-type")]
+        mime_type: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }

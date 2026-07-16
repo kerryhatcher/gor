@@ -4,7 +4,7 @@ priority: P1
 phase: 1
 endpoints:
   - POST /repos/{owner}/{repo}/releases/{id}/assets
-status: todo
+status: done
 blockedBy: [release-view]
 blocks: []
 ---

@@ -197,6 +197,33 @@ impl Client {
             .map_err(GorError::Http)
     }
 
+    /// Upload a release asset to the given upload URL.
+    ///
+    /// GitHub release asset uploads use a separate domain (uploads.github.com)
+    /// and require the content type to be set explicitly.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP request fails.
+    pub fn upload_asset(
+        &self,
+        upload_url: &str,
+        data: &[u8],
+        content_type: &str,
+    ) -> Result<reqwest::blocking::Response, GorError> {
+        let mut req = self
+            .http
+            .post(upload_url)
+            .header("Accept", "application/vnd.github+json")
+            .header("Content-Type", content_type)
+            .body(data.to_vec());
+        if let Some(token) = &self.token {
+            req = req.header("Authorization", format!("Bearer {token}"));
+        }
+        tracing::debug!("POST {upload_url}");
+        req.send().map_err(GorError::Http)
+    }
+
     /// Store the current token in the OS keyring.
     ///
     /// # Errors
