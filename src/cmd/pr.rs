@@ -87,6 +87,28 @@ pub fn run(cmd: PrCommand) -> anyhow::Result<()> {
             web,
             hostname.as_deref(),
         ),
+        PrCommand::Close {
+            number,
+            repo,
+            comment,
+            hostname,
+        } => close(
+            number,
+            repo.as_deref(),
+            comment.as_deref(),
+            hostname.as_deref(),
+        ),
+        PrCommand::Reopen {
+            number,
+            repo,
+            comment,
+            hostname,
+        } => reopen(
+            number,
+            repo.as_deref(),
+            comment.as_deref(),
+            hostname.as_deref(),
+        ),
     }
 }
 
@@ -495,6 +517,132 @@ fn create(
         }
     }
 
+    Ok(())
+}
+
+/// Execute `gor pr close`.
+///
+/// Closes a pull request by its number. Optionally adds a closing comment.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the PR does not exist,
+/// or the API request fails.
+fn close(
+    number: u64,
+    repo: Option<&str>,
+    comment: Option<&str>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    // Resolve the repo spec
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Add a closing comment if specified
+    if let Some(body) = comment {
+        let comment_path = format!(
+            "/repos/{}/{}/issues/{number}/comments",
+            spec.owner, spec.repo
+        );
+        let comment_body = serde_json::json!({"body": body});
+        client
+            .post(&comment_path, &comment_body)
+            .context("failed to add closing comment")?;
+    }
+
+    // Close the PR by setting state to "closed"
+    let path = format!("/repos/{}/{}/pulls/{number}", spec.owner, spec.repo);
+    let body = serde_json::json!({"state": "closed"});
+    let response = client
+        .request(
+            "PATCH",
+            &path,
+            &[],
+            Some(serde_json::to_vec(&body).unwrap_or_default()),
+        )
+        .context("failed to close pull request")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("pull request #{number} not found in '{spec}'");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to close pull request #{number}: HTTP {status}");
+    }
+
+    println!("Closed pull request #{number} in {spec}");
+    Ok(())
+}
+
+/// Execute `gor pr reopen`.
+///
+/// Reopens a closed pull request by its number. Optionally adds a comment.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the PR does not exist,
+/// or the API request fails.
+fn reopen(
+    number: u64,
+    repo: Option<&str>,
+    comment: Option<&str>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    // Resolve the repo spec
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Add a comment if specified
+    if let Some(body) = comment {
+        let comment_path = format!(
+            "/repos/{}/{}/issues/{number}/comments",
+            spec.owner, spec.repo
+        );
+        let comment_body = serde_json::json!({"body": body});
+        client
+            .post(&comment_path, &comment_body)
+            .context("failed to add comment")?;
+    }
+
+    // Reopen the PR by setting state to "open"
+    let path = format!("/repos/{}/{}/pulls/{number}", spec.owner, spec.repo);
+    let body = serde_json::json!({"state": "open"});
+    let response = client
+        .request(
+            "PATCH",
+            &path,
+            &[],
+            Some(serde_json::to_vec(&body).unwrap_or_default()),
+        )
+        .context("failed to reopen pull request")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("pull request #{number} not found in '{spec}'");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to reopen pull request #{number}: HTTP {status}");
+    }
+
+    println!("Reopened pull request #{number} in {spec}");
     Ok(())
 }
 
