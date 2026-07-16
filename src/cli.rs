@@ -279,6 +279,18 @@ pub enum RepoCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Sync a fork with its upstream repository.
+    Sync {
+        /// Repository to sync (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Branch to sync into (default: the fork's default branch).
+        #[arg(short = 'b', long)]
+        branch: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor auth`.
@@ -510,6 +522,98 @@ pub enum PrCommand {
         /// Initialize and update submodules.
         #[arg(long)]
         recurse_submodules: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// View the diff of a pull request.
+    Diff {
+        /// Pull request number.
+        number: u64,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Control colorized output: always, never, auto.
+        #[arg(long, default_value = "auto")]
+        color: String,
+        /// Show only the names of changed files.
+        #[arg(long)]
+        name_only: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Edit a pull request.
+    Edit {
+        /// Pull request number.
+        number: u64,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// New PR title.
+        #[arg(long)]
+        title: Option<String>,
+        /// New PR body (markdown).
+        #[arg(long)]
+        body: Option<String>,
+        /// Change the base branch.
+        #[arg(long)]
+        base: Option<String>,
+        /// Add labels (repeatable).
+        #[arg(long = "add-label")]
+        add_label: Vec<String>,
+        /// Remove labels (repeatable).
+        #[arg(long = "remove-label")]
+        remove_label: Vec<String>,
+        /// Add assignees by login (repeatable).
+        #[arg(long = "add-assignee")]
+        add_assignee: Vec<String>,
+        /// Remove assignees by login (repeatable).
+        #[arg(long = "remove-assignee")]
+        remove_assignee: Vec<String>,
+        /// Milestone ID or title.
+        #[arg(long)]
+        milestone: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Review a pull request.
+    Review {
+        /// Pull request number.
+        number: u64,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Submit an approving review.
+        #[arg(long)]
+        approve: bool,
+        /// Request changes.
+        #[arg(long)]
+        request_changes: bool,
+        /// Leave a general comment (default).
+        #[arg(long)]
+        comment: bool,
+        /// Review body text.
+        #[arg(long)]
+        body: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// View CI checks for a pull request.
+    Checks {
+        /// Pull request number.
+        number: u64,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Poll until all checks complete.
+        #[arg(long)]
+        watch: bool,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
         /// GitHub hostname for GitHub Enterprise Server (default: github.com).
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,

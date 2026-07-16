@@ -4,7 +4,7 @@ priority: P1
 phase: 1
 endpoints:
   - PATCH /repos/{owner}/{repo}/pulls/{number}
-status: todo
+status: done
 blockedBy: [pr-view]
 blocks: []
 ---

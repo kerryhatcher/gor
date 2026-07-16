@@ -163,6 +163,68 @@ pub fn run(cmd: PrCommand) -> anyhow::Result<()> {
             recurse_submodules,
             hostname.as_deref(),
         ),
+        PrCommand::Diff {
+            number,
+            repo,
+            color,
+            name_only,
+            hostname,
+        } => diff(
+            number,
+            repo.as_deref(),
+            &color,
+            name_only,
+            hostname.as_deref(),
+        ),
+        PrCommand::Edit {
+            number,
+            repo,
+            title,
+            body,
+            base,
+            add_label,
+            remove_label,
+            add_assignee,
+            remove_assignee,
+            milestone,
+            hostname,
+        } => pr_edit(
+            number,
+            repo.as_deref(),
+            title.as_deref(),
+            body.as_deref(),
+            base.as_deref(),
+            &add_label,
+            &remove_label,
+            &add_assignee,
+            &remove_assignee,
+            milestone.as_deref(),
+            hostname.as_deref(),
+        ),
+        PrCommand::Review {
+            number,
+            repo,
+            approve,
+            request_changes,
+            comment,
+            body,
+            hostname,
+        } => review(
+            number,
+            repo.as_deref(),
+            approve,
+            request_changes,
+            comment,
+            body.as_deref(),
+            hostname.as_deref(),
+        ),
+        PrCommand::Checks {
+            number,
+            repo,
+            watch,
+            json,
+            hostname,
+        } => checks(number, repo.as_deref(), watch, json, hostname.as_deref()),
     }
 }
 
@@ -1331,6 +1393,437 @@ fn open_in_browser(url: &str) {
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     {
         println!("Open {url} in your browser");
+    }
+}
+
+/// Execute `gor pr diff`.
+///
+/// Shows the unified diff of a pull request. Supports color control and
+/// name-only mode.
+///
+/// # Errors
+///
+/// Returns an error if the PR cannot be found or the API request fails.
+fn diff(
+    number: u64,
+    repo: Option<&str>,
+    _color: &str,
+    name_only: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    if name_only {
+        // Fetch list of changed files
+        let files_path = format!(
+            "/repos/{}/{}/pulls/{number}/files?per_page=100",
+            spec.owner, spec.repo
+        );
+        let resp = client
+            .get(&files_path)
+            .context("failed to fetch PR files")?;
+        let status = resp.status();
+        if status == reqwest::StatusCode::NOT_FOUND {
+            anyhow::bail!("pull request #{number} not found in '{spec}'");
+        }
+        if !status.is_success() {
+            anyhow::bail!("failed to fetch PR files: HTTP {status}");
+        }
+        let files: Vec<serde_json::Value> =
+            resp.json().context("failed to parse files response")?;
+        for file in &files {
+            let filename = file["filename"].as_str().unwrap_or("—");
+            let status_str = file["status"].as_str().unwrap_or("");
+            let additions = file["additions"].as_u64().unwrap_or(0);
+            let deletions = file["deletions"].as_u64().unwrap_or(0);
+            println!("{status_str:8} +{additions:4} -{deletions:4}  {filename}");
+        }
+    } else {
+        // Fetch the diff
+        let diff_path = format!("/repos/{}/{}/pulls/{number}", spec.owner, spec.repo);
+        let resp = client
+            .request(
+                "GET",
+                &diff_path,
+                &["Accept: application/vnd.github.v3.diff".to_string()],
+                None,
+            )
+            .context("failed to fetch PR diff")?;
+        let status = resp.status();
+        if status == reqwest::StatusCode::NOT_FOUND {
+            anyhow::bail!("pull request #{number} not found in '{spec}'");
+        }
+        if !status.is_success() {
+            anyhow::bail!("failed to fetch PR diff: HTTP {status}");
+        }
+        let diff_text = resp.text().context("failed to read diff response")?;
+        println!("{diff_text}");
+    }
+
+    Ok(())
+}
+
+/// Execute `gor pr edit`.
+///
+/// Edits a pull request's title, body, base branch, labels, assignees,
+/// or milestone.
+///
+/// # Errors
+///
+/// Returns an error if the PR cannot be found or the API request fails.
+#[allow(clippy::too_many_arguments)]
+fn pr_edit(
+    number: u64,
+    repo: Option<&str>,
+    title: Option<&str>,
+    body: Option<&str>,
+    base: Option<&str>,
+    add_label: &[String],
+    remove_label: &[String],
+    add_assignee: &[String],
+    remove_assignee: &[String],
+    milestone: Option<&str>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let mut body_map = serde_json::Map::new();
+    if let Some(t) = title {
+        body_map.insert(
+            "title".to_string(),
+            serde_json::Value::String(t.to_string()),
+        );
+    }
+    if let Some(b) = body {
+        body_map.insert("body".to_string(), serde_json::Value::String(b.to_string()));
+    }
+    if let Some(b) = base {
+        body_map.insert("base".to_string(), serde_json::Value::String(b.to_string()));
+    }
+    if let Some(m) = milestone {
+        if let Ok(id) = m.parse::<u64>() {
+            body_map.insert(
+                "milestone".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(id)),
+            );
+        } else {
+            body_map.insert(
+                "milestone".to_string(),
+                serde_json::Value::String(m.to_string()),
+            );
+        }
+    }
+
+    // Handle labels: fetch current, add, remove
+    if !add_label.is_empty() || !remove_label.is_empty() {
+        let get_path = format!("/repos/{}/{}/pulls/{number}", spec.owner, spec.repo);
+        let current: serde_json::Value = client
+            .get(&get_path)
+            .context("failed to fetch current PR")?
+            .json()
+            .context("failed to parse PR response")?;
+        let current_labels: Vec<String> = current["labels"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|l| l["name"].as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let mut new_labels = current_labels;
+        for label in add_label {
+            if !new_labels.contains(label) {
+                new_labels.push(label.clone());
+            }
+        }
+        new_labels.retain(|l| !remove_label.contains(l));
+        body_map.insert(
+            "labels".to_string(),
+            serde_json::Value::Array(
+                new_labels
+                    .iter()
+                    .map(|l| serde_json::Value::String(l.clone()))
+                    .collect(),
+            ),
+        );
+    }
+
+    // Handle assignees
+    if !add_assignee.is_empty() || !remove_assignee.is_empty() {
+        let get_path = format!("/repos/{}/{}/pulls/{number}", spec.owner, spec.repo);
+        let current: serde_json::Value = client
+            .get(&get_path)
+            .context("failed to fetch current PR")?
+            .json()
+            .context("failed to parse PR response")?;
+        let current_assignees: Vec<String> = current["assignees"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|a| a["login"].as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let mut new_assignees = current_assignees;
+        for a in add_assignee {
+            if !new_assignees.contains(a) {
+                new_assignees.push(a.clone());
+            }
+        }
+        new_assignees.retain(|a| !remove_assignee.contains(a));
+        body_map.insert(
+            "assignees".to_string(),
+            serde_json::Value::Array(
+                new_assignees
+                    .iter()
+                    .map(|a| serde_json::Value::String(a.clone()))
+                    .collect(),
+            ),
+        );
+    }
+
+    if body_map.is_empty() {
+        anyhow::bail!("no changes specified");
+    }
+
+    let path = format!("/repos/{}/{}/pulls/{number}", spec.owner, spec.repo);
+    let body_value = serde_json::Value::Object(body_map);
+    let response = client
+        .request("PATCH", &path, &[], Some(serde_json::to_vec(&body_value)?))
+        .context("failed to edit PR")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("pull request #{number} not found in '{spec}'");
+    }
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("edit failed");
+        anyhow::bail!("failed to edit PR #{number}: {msg}");
+    }
+
+    let pr: serde_json::Value = response.json().context("failed to parse response")?;
+    let pr_number = pr["number"].as_u64().unwrap_or(number);
+    let pr_title = pr["title"].as_str().unwrap_or("—");
+    let pr_base = pr["base"]["ref"].as_str().unwrap_or("—");
+    let pr_labels: Vec<&str> = pr["labels"]
+        .as_array()
+        .map(|arr| arr.iter().filter_map(|l| l["name"].as_str()).collect())
+        .unwrap_or_default();
+    let pr_assignees: Vec<&str> = pr["assignees"]
+        .as_array()
+        .map(|arr| arr.iter().filter_map(|a| a["login"].as_str()).collect())
+        .unwrap_or_default();
+    let pr_milestone = pr["milestone"]["title"].as_str().unwrap_or("—");
+
+    println!("✓ Updated PR #{pr_number}: {pr_title}");
+    println!("  Base:      {pr_base}");
+    println!("  Labels:    {}", pr_labels.join(", "));
+    println!("  Assignees: {}", pr_assignees.join(", "));
+    println!("  Milestone: {pr_milestone}");
+    Ok(())
+}
+
+/// Execute `gor pr review`.
+///
+/// Submits a review on a pull request with approve, request_changes,
+/// or comment state.
+///
+/// # Errors
+///
+/// Returns an error if the PR cannot be found or the API request fails.
+fn review(
+    number: u64,
+    repo: Option<&str>,
+    approve: bool,
+    request_changes: bool,
+    _comment: bool,
+    body: Option<&str>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let event = if approve {
+        "APPROVE"
+    } else if request_changes {
+        "REQUEST_CHANGES"
+    } else {
+        "COMMENT"
+    };
+
+    let mut body_map = serde_json::Map::new();
+    body_map.insert(
+        "event".to_string(),
+        serde_json::Value::String(event.to_string()),
+    );
+    if let Some(b) = body {
+        body_map.insert("body".to_string(), serde_json::Value::String(b.to_string()));
+    }
+
+    let path = format!("/repos/{}/{}/pulls/{number}/reviews", spec.owner, spec.repo);
+    let body_value = serde_json::Value::Object(body_map);
+    let response = client
+        .post(&path, &body_value)
+        .context("failed to submit review")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("pull request #{number} not found in '{spec}'");
+    }
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("review failed");
+        anyhow::bail!("failed to submit review for PR #{number}: {msg}");
+    }
+
+    let review: serde_json::Value = response.json().context("failed to parse response")?;
+    let state = review["state"].as_str().unwrap_or(event);
+    println!("✓ Submitted {state} review on PR #{number}");
+    Ok(())
+}
+
+/// Execute `gor pr checks`.
+///
+/// Shows CI check status for a pull request. Supports --watch for polling
+/// and --json for structured output.
+///
+/// # Errors
+///
+/// Returns an error if the PR cannot be found or the API request fails.
+#[allow(clippy::needless_pass_by_value)]
+fn checks(
+    number: u64,
+    repo: Option<&str>,
+    watch: bool,
+    json: Option<Vec<String>>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Fetch the PR to get the head SHA
+    let pr_path = format!("/repos/{}/{}/pulls/{number}", spec.owner, spec.repo);
+    let pr_resp = client.get(&pr_path).context("failed to fetch PR")?;
+    let pr_status = pr_resp.status();
+    if pr_status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("pull request #{number} not found in '{spec}'");
+    }
+    if !pr_status.is_success() {
+        anyhow::bail!("failed to fetch PR #{number}: HTTP {pr_status}");
+    }
+    let pr: serde_json::Value = pr_resp.json().context("failed to parse PR response")?;
+    let head_sha = pr["head"]["sha"].as_str().context("PR missing head SHA")?;
+
+    loop {
+        let checks_path = format!(
+            "/repos/{}/{}/commits/{head_sha}/check-runs?per_page=100",
+            spec.owner, spec.repo
+        );
+        let resp = client
+            .get(&checks_path)
+            .context("failed to fetch check runs")?;
+        let status = resp.status();
+        if !status.is_success() {
+            anyhow::bail!("failed to fetch checks: HTTP {status}");
+        }
+        let data: serde_json::Value = resp.json().context("failed to parse checks response")?;
+        let check_runs = data["check_runs"]
+            .as_array()
+            .map_or(&[] as &[serde_json::Value], |a| a);
+
+        if let Some(ref fields) = json {
+            let fields_ref: Option<&[String]> = if fields.is_empty() {
+                None
+            } else {
+                Some(fields)
+            };
+            print_json(&check_runs, fields_ref);
+            return Ok(());
+        }
+
+        if check_runs.is_empty() {
+            println!("No checks found for PR #{number}.");
+            return Ok(());
+        }
+
+        let mut passed = 0u32;
+        let mut failed = 0u32;
+        let mut pending = 0u32;
+
+        for check in check_runs {
+            let name = check["name"].as_str().unwrap_or("—");
+            let check_status = check["status"].as_str().unwrap_or("unknown");
+            let conclusion = check["conclusion"].as_str().unwrap_or("pending");
+            let details_url = check["html_url"].as_str().unwrap_or("—");
+
+            let icon = match (check_status, conclusion) {
+                ("completed", "success" | "neutral") => {
+                    passed += 1;
+                    "✓"
+                }
+                ("completed", "failure" | "timed_out" | "cancelled" | "action_required") => {
+                    failed += 1;
+                    "✗"
+                }
+                _ => {
+                    pending += 1;
+                    "○"
+                }
+            };
+
+            println!("{icon} {name:<40} {check_status:<12} {conclusion:<16} {details_url}");
+        }
+
+        println!();
+        println!("{passed} passed, {failed} failed, {pending} pending");
+
+        if !watch || pending == 0 {
+            if failed > 0 {
+                std::process::exit(1);
+            }
+            return Ok(());
+        }
+
+        std::thread::sleep(std::time::Duration::from_secs(5));
     }
 }
 

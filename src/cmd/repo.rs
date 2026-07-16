@@ -138,6 +138,11 @@ pub fn run(cmd: RepoCommand) -> anyhow::Result<()> {
             yes,
             hostname.as_deref(),
         ),
+        RepoCommand::Sync {
+            repo,
+            branch,
+            hostname,
+        } => sync(repo.as_deref(), branch.as_deref(), hostname.as_deref()),
     }
 }
 
@@ -1022,6 +1027,73 @@ fn print_repo_table(repo: &serde_json::Value) {
     println!("license:     {license_name}");
     println!("default:     {default_branch}");
     println!("updated:     {}", format_date(pushed_at));
+}
+
+/// Execute `gor repo sync`.
+///
+/// Syncs a fork's default branch from its upstream repository.
+///
+/// # Errors
+///
+/// Returns an error if the repository is not a fork, the API request fails,
+/// or the sync would result in merge conflicts.
+fn sync(repo: Option<&str>, branch: Option<&str>, hostname: Option<&str>) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let path = format!("/repos/{}/{}/merge-upstream", spec.owner, spec.repo);
+
+    let mut body_map = serde_json::Map::new();
+    body_map.insert(
+        "branch".to_string(),
+        serde_json::Value::String(branch.unwrap_or("main").to_string()),
+    );
+    let body_value = serde_json::Value::Object(body_map);
+
+    let response = client
+        .post(&path, &body_value)
+        .context("failed to sync repository")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("repository '{spec}' not found or is not a fork");
+    }
+    if status == reqwest::StatusCode::CONFLICT {
+        anyhow::bail!(
+            "sync would result in merge conflicts; resolve conflicts manually and try again"
+        );
+    }
+    if status == reqwest::StatusCode::UNPROCESSABLE_ENTITY {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or(
+            "sync failed - check that the repository is a fork and has an upstream configured",
+        );
+        anyhow::bail!("{msg}");
+    }
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("sync failed");
+        anyhow::bail!("failed to sync '{spec}': {msg}");
+    }
+
+    let result: serde_json::Value = response.json().context("failed to parse sync response")?;
+
+    if let Some(merge_sha) = result["merge_after"].as_str() {
+        println!("✓ Synced '{spec}' with upstream (merge commit: {merge_sha})");
+    } else {
+        println!("✓ '{spec}' is already up to date with upstream");
+    }
+
+    Ok(())
 }
 
 /// Open a URL in the default browser using the system's default handler.

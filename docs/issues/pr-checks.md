@@ -4,7 +4,7 @@ priority: P1
 phase: 1
 endpoints:
   - GET /repos/{owner}/{repo}/commits/{ref}/check-runs
-status: todo
+status: done
 blockedBy: [pr-view]
 blocks: []
 ---

@@ -4,7 +4,7 @@ priority: P1
 phase: 1
 endpoints:
   - POST /repos/{owner}/{repo}/merge-upstream
-status: todo
+status: done
 blockedBy: [repo-view]
 blocks: []
 ---
