@@ -3,7 +3,7 @@ tags: [copilot, read]
 priority: P4
 phase: 4
 endpoints: []
-status: todo
+status: done
 blockedBy: [auth-login]
 blocks: []
 ---

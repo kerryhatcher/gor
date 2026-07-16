@@ -103,6 +103,9 @@ pub enum Command {
     /// Work with GitHub Classroom.
     #[command(subcommand)]
     Classroom(ClassroomCommand),
+    /// Manage GitHub Copilot.
+    #[command(subcommand)]
+    Copilot(CopilotCommand),
     /// Generate shell completion scripts.
     Completion {
         /// Shell type: bash, zsh, fish, or powershell.
@@ -2225,6 +2228,32 @@ pub enum ClassroomCommand {
     Assignments {
         /// Classroom ID.
         id: u64,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+}
+
+/// Subcommands for `gor copilot`.
+#[derive(Subcommand, Debug)]
+pub enum CopilotCommand {
+    /// Show Copilot subscription status.
+    Status {
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Show Copilot usage statistics for an organization.
+    Usage {
+        /// Organization to query usage for.
+        #[arg(long)]
+        org: Option<String>,
         /// Output as JSON. Optionally specify comma-separated field names.
         #[arg(long, num_args = 0.., value_delimiter = ',')]
         json: Option<Vec<String>>,
