@@ -3,13 +3,14 @@
 //! Provides repository viewing, listing, and management commands.
 //! Currently supports `gor repo view` for displaying repository metadata.
 
-#![allow(clippy::print_stdout)]
+#![allow(clippy::print_stdout, clippy::print_stderr)]
 
 use crate::cli::RepoCommand;
 use crate::client::Client;
 use crate::output::{format_count, format_date, print_json};
 use crate::repository::{detect_remote, parse_repo_spec};
 use anyhow::Context;
+use std::io::Write;
 
 /// Run the `gor repo` subcommand.
 ///
@@ -39,6 +40,17 @@ pub fn run(cmd: RepoCommand) -> anyhow::Result<()> {
             language.as_deref(),
             limit,
             json,
+            hostname.as_deref(),
+        ),
+        RepoCommand::Clone {
+            owner_repo,
+            directory,
+            upstream_remote_name,
+            hostname,
+        } => clone(
+            &owner_repo,
+            directory.as_deref(),
+            &upstream_remote_name,
             hostname.as_deref(),
         ),
     }
@@ -208,6 +220,120 @@ fn list(
 
     let filtered = filter_repos(repos, visibility, fork, language, limit);
     output_repos(&filtered, json);
+    Ok(())
+}
+
+/// Execute `gor repo clone`.
+///
+/// Clones a GitHub repository to the local machine using `gix`.
+/// Supports OWNER/REPO format and full URLs. For forks, automatically
+/// adds an upstream remote pointing to the parent repository.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the clone fails,
+/// or the upstream remote cannot be added.
+fn clone(
+    owner_repo: &str,
+    directory: Option<&str>,
+    upstream_remote_name: &str,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let host = hostname.unwrap_or("github.com");
+
+    // Determine if input is a URL or OWNER/REPO
+    let (clone_url, _is_fork, parent_clone_url) =
+        if owner_repo.starts_with("https://") || owner_repo.starts_with("git@") {
+            // Full URL provided — use it directly, no API lookup for fork info
+            (owner_repo.to_string(), false, None)
+        } else {
+            // OWNER/REPO format — fetch repo info from API
+            let spec = parse_repo_spec(owner_repo).context("invalid repository spec")?;
+            let client = Client::new(host).context("failed to create HTTP client")?;
+
+            let path = format!("/repos/{}/{}", spec.owner, spec.repo);
+            let response = client
+                .get(&path)
+                .context("failed to fetch repository data")?;
+
+            let status = response.status();
+            if status == reqwest::StatusCode::NOT_FOUND {
+                anyhow::bail!("repository '{spec}' not found");
+            }
+            if !status.is_success() {
+                anyhow::bail!("failed to fetch repository '{spec}': HTTP {status}");
+            }
+
+            let repo: serde_json::Value = response
+                .json()
+                .context("failed to parse repository response")?;
+
+            let clone_url = repo["clone_url"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("no clone_url in repository response"))?
+                .to_string();
+
+            let is_fork = repo["fork"].as_bool().unwrap_or(false);
+            let parent_clone_url = if is_fork {
+                repo["parent"]["clone_url"].as_str().map(String::from)
+            } else {
+                None
+            };
+
+            (clone_url, is_fork, parent_clone_url)
+        };
+
+    // Determine target directory
+    let dest_dir = directory.map_or_else(
+        || {
+            // Derive directory name from the repo name
+            let repo_name = clone_url.rfind('/').map_or(clone_url.as_str(), |pos| {
+                clone_url[pos + 1..].trim_end_matches(".git")
+            });
+            std::path::PathBuf::from(repo_name)
+        },
+        std::path::PathBuf::from,
+    );
+
+    // Clone the repository using gix
+    eprintln!("Cloning into '{}'...", dest_dir.display());
+
+    let mut prepare_fetch =
+        gix::prepare_clone(clone_url.as_str(), &dest_dir).context("failed to prepare clone")?;
+
+    let (mut prepare_checkout, _outcome) = prepare_fetch
+        .fetch_then_checkout(gix::progress::Discard, &gix::interrupt::IS_INTERRUPTED)
+        .context("failed to fetch repository")?;
+
+    let (_repo, _checkout_outcome) = prepare_checkout
+        .main_worktree(gix::progress::Discard, &gix::interrupt::IS_INTERRUPTED)
+        .context("failed to checkout worktree")?;
+
+    // If it's a fork, add the upstream remote
+    if let Some(parent_url) = parent_clone_url {
+        eprintln!("Adding upstream remote '{upstream_remote_name}'...");
+
+        // Open the cloned repo to add the remote
+        let repo = gix::open(&dest_dir).context("failed to open cloned repository")?;
+
+        // Write the remote section directly to the git config file
+        let config_path = repo.git_dir().join("config");
+        let mut file = std::fs::OpenOptions::new()
+            .append(true)
+            .open(&config_path)
+            .context("failed to open git config for appending")?;
+
+        let url_escaped = parent_url.replace('"', "\\\"");
+        writeln!(
+            file,
+            "[remote \"{upstream_remote_name}\"]\n\turl = {url_escaped}\n\tfetch = +refs/heads/*:refs/remotes/{upstream_remote_name}/*"
+        )
+        .context("failed to write upstream remote config")?;
+
+        eprintln!("Added upstream remote '{upstream_remote_name}'");
+    }
+
+    eprintln!("Clone complete.");
     Ok(())
 }
 
@@ -533,5 +659,29 @@ mod tests {
             .collect();
         let filtered = filter_repos(repos, "all", "include", None, 5);
         assert_eq!(filtered.len(), 5);
+    }
+
+    #[test]
+    fn clone_directory_name_from_url() {
+        // Test the directory name derivation logic used in clone()
+        let url = "https://github.com/octocat/hello-world.git";
+        let name = url
+            .rfind('/')
+            .map_or(url, |pos| url[pos + 1..].trim_end_matches(".git"));
+        assert_eq!(name, "hello-world");
+
+        // Without .git suffix
+        let url = "https://github.com/octocat/hello-world";
+        let name = url
+            .rfind('/')
+            .map_or(url, |pos| url[pos + 1..].trim_end_matches(".git"));
+        assert_eq!(name, "hello-world");
+
+        // SSH URL with path
+        let url = "git@github.com:octocat/repo.git";
+        let name = url
+            .rfind('/')
+            .map_or(url, |pos| url[pos + 1..].trim_end_matches(".git"));
+        assert_eq!(name, "repo");
     }
 }

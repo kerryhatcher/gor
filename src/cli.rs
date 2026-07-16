@@ -137,6 +137,20 @@ pub enum RepoCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Clone a repository locally.
+    Clone {
+        /// Repository to clone (OWNER/REPO format or full URL).
+        owner_repo: String,
+        /// Target directory name.
+        #[arg(short = 'd', long)]
+        directory: Option<String>,
+        /// Name of the upstream remote (default: upstream).
+        #[arg(long, default_value = "upstream")]
+        upstream_remote_name: String,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor auth`.
