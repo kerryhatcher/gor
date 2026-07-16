@@ -1989,6 +1989,47 @@ pub enum ProjectCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// View a project's details.
+    View {
+        /// Project number.
+        number: u64,
+        /// Organization that owns the project.
+        #[arg(long, conflicts_with = "owner")]
+        org: Option<String>,
+        /// User that owns the project.
+        #[arg(long, conflicts_with = "org")]
+        owner: Option<String>,
+        /// Open the project in the browser.
+        #[arg(short = 'w', long)]
+        web: bool,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Add an item to a project.
+    ItemAdd {
+        /// Project number.
+        #[arg(long)]
+        project: u64,
+        /// Issue number to add.
+        #[arg(long, conflicts_with = "pull_request")]
+        issue: Option<u64>,
+        /// Pull request number to add.
+        #[arg(long = "pr", conflicts_with = "issue")]
+        pull_request: Option<u64>,
+        /// Organization that owns the project.
+        #[arg(long, conflicts_with = "owner")]
+        org: Option<String>,
+        /// User that owns the project.
+        #[arg(long, conflicts_with = "org")]
+        owner: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor attestation`.
