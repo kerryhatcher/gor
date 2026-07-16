@@ -53,6 +53,91 @@ pub fn run(cmd: RepoCommand) -> anyhow::Result<()> {
             &upstream_remote_name,
             hostname.as_deref(),
         ),
+        RepoCommand::Create {
+            name,
+            description,
+            private,
+            internal,
+            org,
+            template,
+            clone,
+            remote,
+            push,
+            disable_wiki,
+            disable_issues,
+            hostname,
+        } => repo_create(
+            &name,
+            description.as_deref(),
+            private,
+            internal,
+            org.as_deref(),
+            template.as_deref(),
+            clone,
+            &remote,
+            push,
+            disable_wiki,
+            disable_issues,
+            hostname.as_deref(),
+        ),
+        RepoCommand::Fork {
+            owner_repo,
+            org,
+            clone,
+            remote,
+            fork_name,
+            hostname,
+        } => repo_fork(
+            &owner_repo,
+            org.as_deref(),
+            clone,
+            &remote,
+            fork_name.as_deref(),
+            hostname.as_deref(),
+        ),
+        RepoCommand::Delete {
+            owner_repo,
+            yes,
+            hostname,
+        } => repo_delete(&owner_repo, yes, hostname.as_deref()),
+        RepoCommand::Edit {
+            repo,
+            description,
+            visibility,
+            add_topic,
+            remove_topic,
+            default_branch,
+            enable_wiki,
+            enable_issues,
+            enable_projects,
+            hostname,
+        } => repo_edit(
+            repo.as_deref(),
+            description.as_deref(),
+            visibility.as_deref(),
+            &add_topic,
+            &remove_topic,
+            default_branch.as_deref(),
+            enable_wiki.as_deref(),
+            enable_issues.as_deref(),
+            enable_projects.as_deref(),
+            hostname.as_deref(),
+        ),
+        RepoCommand::Transfer {
+            target,
+            repo,
+            new_name,
+            team,
+            yes,
+            hostname,
+        } => repo_transfer(
+            &target,
+            repo.as_deref(),
+            new_name.as_deref(),
+            &team,
+            yes,
+            hostname.as_deref(),
+        ),
     }
 }
 
@@ -334,6 +419,479 @@ fn clone(
     }
 
     eprintln!("Clone complete.");
+    Ok(())
+}
+
+/// Execute `gor repo create`.
+///
+/// Creates a new GitHub repository under the authenticated user or an
+/// organization. Supports setting description, visibility, feature toggles,
+/// and optionally cloning the new repository locally.
+///
+/// # Errors
+///
+/// Returns an error if the API request fails.
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
+fn repo_create(
+    name: &str,
+    description: Option<&str>,
+    private: bool,
+    internal: bool,
+    org: Option<&str>,
+    _template: Option<&str>,
+    clone: bool,
+    _remote: &str,
+    _push: bool,
+    disable_wiki: bool,
+    disable_issues: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Build the request body
+    let mut body_map = serde_json::Map::new();
+    body_map.insert(
+        "name".to_string(),
+        serde_json::Value::String(name.to_string()),
+    );
+    body_map.insert(
+        "private".to_string(),
+        serde_json::Value::Bool(private || internal),
+    );
+    if internal {
+        body_map.insert(
+            "visibility".to_string(),
+            serde_json::Value::String("internal".to_string()),
+        );
+    }
+    if let Some(d) = description {
+        body_map.insert(
+            "description".to_string(),
+            serde_json::Value::String(d.to_string()),
+        );
+    }
+    if disable_wiki {
+        body_map.insert("has_wiki".to_string(), serde_json::Value::Bool(false));
+    }
+    if disable_issues {
+        body_map.insert("has_issues".to_string(), serde_json::Value::Bool(false));
+    }
+
+    let body_value = serde_json::Value::Object(body_map);
+
+    // Determine the API path
+    let path = org.map_or_else(|| "/user/repos".to_string(), |o| format!("/orgs/{o}/repos"));
+
+    let response = client
+        .post(&path, &body_value)
+        .context("failed to create repository")?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("creation failed");
+        anyhow::bail!("failed to create repository: {msg}");
+    }
+
+    let repo: serde_json::Value = response
+        .json()
+        .context("failed to parse repository response")?;
+
+    let clone_url = repo["clone_url"].as_str().unwrap_or("");
+    let html_url = repo["html_url"].as_str().unwrap_or("");
+    let full_name = repo["full_name"].as_str().unwrap_or("");
+
+    println!("{html_url}");
+
+    // Clone the new repository locally if requested
+    if clone && !clone_url.is_empty() {
+        let dest_dir = std::path::PathBuf::from(name);
+        eprintln!("Cloning into '{}'...", dest_dir.display());
+
+        let url =
+            gix::url::parse(clone_url.as_bytes().into()).context("failed to parse clone URL")?;
+        let mut prepare_fetch =
+            gix::prepare_clone(url, &dest_dir).context("failed to prepare clone")?;
+        let (mut prepare_checkout, _outcome) = prepare_fetch
+            .fetch_then_checkout(gix::progress::Discard, &gix::interrupt::IS_INTERRUPTED)
+            .context("failed to fetch repository")?;
+        let (_repo, _checkout_outcome) = prepare_checkout
+            .main_worktree(gix::progress::Discard, &gix::interrupt::IS_INTERRUPTED)
+            .context("failed to checkout worktree")?;
+        eprintln!("Cloned {full_name}");
+    }
+
+    Ok(())
+}
+
+/// Execute `gor repo fork`.
+///
+/// Forks a repository to the authenticated user's account or an organization.
+/// Optionally clones the fork locally after creation.
+///
+/// # Errors
+///
+/// Returns an error if the API request fails.
+fn repo_fork(
+    owner_repo: &str,
+    org: Option<&str>,
+    clone: bool,
+    _remote: &str,
+    fork_name: Option<&str>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = parse_repo_spec(owner_repo).context("invalid repository spec")?;
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Build the request body
+    let mut body_map = serde_json::Map::new();
+    if let Some(o) = org {
+        body_map.insert(
+            "organization".to_string(),
+            serde_json::Value::String(o.to_string()),
+        );
+    }
+    if let Some(n) = fork_name {
+        body_map.insert("name".to_string(), serde_json::Value::String(n.to_string()));
+    }
+
+    let body_value = serde_json::Value::Object(body_map);
+
+    let path = format!("/repos/{}/{}/forks", spec.owner, spec.repo);
+    let response = client
+        .post(&path, &body_value)
+        .context("failed to fork repository")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("repository '{spec}' not found");
+    }
+    if status == reqwest::StatusCode::ACCEPTED {
+        // Fork is being created asynchronously
+        let fork: serde_json::Value = response.json().context("failed to parse fork response")?;
+        let html_url = fork["html_url"].as_str().unwrap_or("");
+        println!("{html_url}");
+        eprintln!("Fork is being created. It may take a few minutes.");
+        return Ok(());
+    }
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("fork failed");
+        anyhow::bail!("failed to fork repository: {msg}");
+    }
+
+    let fork: serde_json::Value = response.json().context("failed to parse fork response")?;
+
+    let clone_url = fork["clone_url"].as_str().unwrap_or("");
+    let html_url = fork["html_url"].as_str().unwrap_or("");
+    let full_name = fork["full_name"].as_str().unwrap_or("");
+
+    println!("{html_url}");
+
+    // Clone the fork locally if requested
+    if clone && !clone_url.is_empty() {
+        let repo_name = fork_name.unwrap_or(&spec.repo);
+        let dest_dir = std::path::PathBuf::from(repo_name);
+        eprintln!("Cloning into '{}'...", dest_dir.display());
+
+        let url =
+            gix::url::parse(clone_url.as_bytes().into()).context("failed to parse clone URL")?;
+        let mut prepare_fetch =
+            gix::prepare_clone(url, &dest_dir).context("failed to prepare clone")?;
+        let (mut prepare_checkout, _outcome) = prepare_fetch
+            .fetch_then_checkout(gix::progress::Discard, &gix::interrupt::IS_INTERRUPTED)
+            .context("failed to fetch repository")?;
+        let (_repo, _checkout_outcome) = prepare_checkout
+            .main_worktree(gix::progress::Discard, &gix::interrupt::IS_INTERRUPTED)
+            .context("failed to checkout worktree")?;
+        eprintln!("Cloned {full_name}");
+    }
+
+    Ok(())
+}
+
+/// Execute `gor repo delete`.
+///
+/// Deletes a repository. Requires confirmation unless --yes is provided.
+///
+/// # Errors
+///
+/// Returns an error if the API request fails or the user cancels.
+fn repo_delete(owner_repo: &str, yes: bool, hostname: Option<&str>) -> anyhow::Result<()> {
+    let spec = parse_repo_spec(owner_repo).context("invalid repository spec")?;
+
+    // Confirmation prompt
+    if !yes {
+        eprintln!("WARNING: This will delete the repository '{spec}' and all its data.");
+        eprint!("Type the repository name '{spec}' to confirm: ");
+        std::io::stdout().flush().ok();
+        let mut input = String::new();
+        std::io::stdin()
+            .read_line(&mut input)
+            .context("failed to read input")?;
+        let input = input.trim();
+        if input != spec.to_string() {
+            anyhow::bail!("confirmation failed: expected '{spec}', got '{input}'");
+        }
+    }
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let path = format!("/repos/{}/{}", spec.owner, spec.repo);
+    let response = client
+        .request("DELETE", &path, &[], None)
+        .context("failed to delete repository")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("repository '{spec}' not found");
+    }
+    if status == reqwest::StatusCode::FORBIDDEN {
+        anyhow::bail!("you do not have permission to delete '{spec}'");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to delete repository '{spec}': HTTP {status}");
+    }
+
+    println!("Deleted repository '{spec}'");
+    Ok(())
+}
+
+/// Execute `gor repo edit`.
+///
+/// Edits a repository's settings including description, visibility, topics,
+/// default branch, and feature toggles.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found or the API request fails.
+#[allow(clippy::too_many_arguments)]
+fn repo_edit(
+    repo: Option<&str>,
+    description: Option<&str>,
+    visibility: Option<&str>,
+    add_topic: &[String],
+    remove_topic: &[String],
+    default_branch: Option<&str>,
+    enable_wiki: Option<&str>,
+    enable_issues: Option<&str>,
+    enable_projects: Option<&str>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Build the request body with only the fields that were provided
+    let mut body_map = serde_json::Map::new();
+
+    if let Some(d) = description {
+        body_map.insert(
+            "description".to_string(),
+            serde_json::Value::String(d.to_string()),
+        );
+    }
+    if let Some(v) = visibility {
+        body_map.insert(
+            "visibility".to_string(),
+            serde_json::Value::String(v.to_string()),
+        );
+    }
+    if let Some(b) = default_branch {
+        body_map.insert(
+            "default_branch".to_string(),
+            serde_json::Value::String(b.to_string()),
+        );
+    }
+    if let Some(w) = enable_wiki {
+        body_map.insert("has_wiki".to_string(), serde_json::Value::Bool(w == "true"));
+    }
+    if let Some(i) = enable_issues {
+        body_map.insert(
+            "has_issues".to_string(),
+            serde_json::Value::Bool(i == "true"),
+        );
+    }
+    if let Some(p) = enable_projects {
+        body_map.insert(
+            "has_projects".to_string(),
+            serde_json::Value::Bool(p == "true"),
+        );
+    }
+
+    let body_value = serde_json::Value::Object(body_map);
+
+    let path = format!("/repos/{}/{}", spec.owner, spec.repo);
+    let response = client
+        .request("PATCH", &path, &[], Some(serde_json::to_vec(&body_value)?))
+        .context("failed to update repository")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("repository '{spec}' not found");
+    }
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("update failed");
+        anyhow::bail!("failed to update repository '{spec}': {msg}");
+    }
+
+    let updated: serde_json::Value = response
+        .json()
+        .context("failed to parse repository response")?;
+
+    // Handle topics separately (GitHub API has a separate endpoint)
+    if !add_topic.is_empty() || !remove_topic.is_empty() {
+        // Get current topics first
+        let topics_path = format!("/repos/{}/{}/topics", spec.owner, spec.repo);
+        let topics_response = client.get(&topics_path).context("failed to fetch topics")?;
+        let mut current_topics: Vec<String> = topics_response
+            .json::<serde_json::Value>()
+            .ok()
+            .and_then(|v| v["names"].as_array().cloned())
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|v| v.as_str().map(String::from))
+            .collect();
+
+        // Add new topics
+        for topic in add_topic {
+            if !current_topics.contains(topic) {
+                current_topics.push(topic.clone());
+            }
+        }
+
+        // Remove topics
+        current_topics.retain(|t| !remove_topic.contains(t));
+
+        // Update topics
+        let topics_body = serde_json::json!({"names": current_topics});
+        let accept_header = "application/vnd.github.mercy-preview+json".to_string();
+        if let Err(e) = client.request(
+            "PUT",
+            &topics_path,
+            &[format!("Accept: {accept_header}")],
+            Some(serde_json::to_vec(&topics_body)?),
+        ) {
+            eprintln!("Warning: failed to update topics: {e}");
+        }
+    }
+
+    // Print updated details
+    let full_name = updated["full_name"].as_str().unwrap_or("");
+    let desc = updated["description"].as_str().unwrap_or("—");
+    let vis = updated["visibility"].as_str().unwrap_or("public");
+    let branch = updated["default_branch"].as_str().unwrap_or("—");
+    let wiki = updated["has_wiki"].as_bool().unwrap_or(true);
+    let issues = updated["has_issues"].as_bool().unwrap_or(true);
+    let projects = updated["has_projects"].as_bool().unwrap_or(true);
+
+    println!("Updated repository {full_name}");
+    println!("  description:  {desc}");
+    println!("  visibility:   {vis}");
+    println!("  default:      {branch}");
+    println!("  wiki:         {wiki}");
+    println!("  issues:       {issues}");
+    println!("  projects:     {projects}");
+
+    Ok(())
+}
+
+/// Execute `gor repo transfer`.
+///
+/// Transfers a repository to another user or organization.
+/// Requires confirmation unless --yes is provided.
+///
+/// # Errors
+///
+/// Returns an error if the API request fails or the user cancels.
+fn repo_transfer(
+    target: &str,
+    repo: Option<&str>,
+    new_name: Option<&str>,
+    _teams: &[String],
+    yes: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    // Confirmation prompt
+    if !yes {
+        eprintln!("WARNING: This will transfer repository '{spec}' to '{target}'.");
+        eprint!("Type the repository name '{spec}' to confirm: ");
+        std::io::stdout().flush().ok();
+        let mut input = String::new();
+        std::io::stdin()
+            .read_line(&mut input)
+            .context("failed to read input")?;
+        let input = input.trim();
+        if input != spec.to_string() {
+            anyhow::bail!("confirmation failed: expected '{spec}', got '{input}'");
+        }
+    }
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Build the request body
+    let mut body_map = serde_json::Map::new();
+    body_map.insert(
+        "new_owner".to_string(),
+        serde_json::Value::String(target.to_string()),
+    );
+    if let Some(n) = new_name {
+        body_map.insert(
+            "new_name".to_string(),
+            serde_json::Value::String(n.to_string()),
+        );
+    }
+
+    let body_value = serde_json::Value::Object(body_map);
+
+    let path = format!("/repos/{}/{}/transfer", spec.owner, spec.repo);
+    let response = client
+        .request("POST", &path, &[], Some(serde_json::to_vec(&body_value)?))
+        .context("failed to transfer repository")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("repository '{spec}' not found");
+    }
+    if status == reqwest::StatusCode::FORBIDDEN {
+        anyhow::bail!("you do not have permission to transfer '{spec}' to '{target}'");
+    }
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("transfer failed");
+        anyhow::bail!("failed to transfer repository: {msg}");
+    }
+
+    let result: serde_json::Value = response
+        .json()
+        .context("failed to parse transfer response")?;
+
+    let html_url = result["html_url"].as_str().unwrap_or("");
+    println!("Transferred repository to {target}");
+    println!("{html_url}");
+
     Ok(())
 }
 

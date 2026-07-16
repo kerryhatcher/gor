@@ -157,6 +157,128 @@ pub enum RepoCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Create a repository.
+    Create {
+        /// Repository name.
+        name: String,
+        /// Repository description.
+        #[arg(long)]
+        description: Option<String>,
+        /// Create a private repository.
+        #[arg(long)]
+        private: bool,
+        /// Create an internal repository (GHES only).
+        #[arg(long)]
+        internal: bool,
+        /// Organization to create the repository under.
+        #[arg(long)]
+        org: Option<String>,
+        /// Template repository (OWNER/REPO).
+        #[arg(long)]
+        template: Option<String>,
+        /// Clone the new repository locally after creation.
+        #[arg(long)]
+        clone: bool,
+        /// Remote name when cloning (default: origin).
+        #[arg(long, default_value = "origin")]
+        remote: String,
+        /// Push local content to the new repository.
+        #[arg(long)]
+        push: bool,
+        /// Disable the wiki.
+        #[arg(long)]
+        disable_wiki: bool,
+        /// Disable the issue tracker.
+        #[arg(long)]
+        disable_issues: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Fork a repository.
+    Fork {
+        /// Repository to fork (OWNER/REPO format).
+        owner_repo: String,
+        /// Organization to fork into.
+        #[arg(long)]
+        org: Option<String>,
+        /// Clone the fork locally after creation.
+        #[arg(long)]
+        clone: bool,
+        /// Remote name when cloning (default: origin).
+        #[arg(long, default_value = "origin")]
+        remote: String,
+        /// Custom name for the fork.
+        #[arg(long)]
+        fork_name: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Delete a repository.
+    Delete {
+        /// Repository to delete (OWNER/REPO format).
+        owner_repo: String,
+        /// Skip confirmation prompt.
+        #[arg(long)]
+        yes: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Edit a repository's settings.
+    Edit {
+        /// Repository to edit (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Repository description.
+        #[arg(long)]
+        description: Option<String>,
+        /// Repository visibility: public, private, or internal.
+        #[arg(long, value_parser = ["public", "private", "internal"])]
+        visibility: Option<String>,
+        /// Add a topic (repeatable).
+        #[arg(long = "add-topic")]
+        add_topic: Vec<String>,
+        /// Remove a topic (repeatable).
+        #[arg(long = "remove-topic")]
+        remove_topic: Vec<String>,
+        /// Default branch name.
+        #[arg(long)]
+        default_branch: Option<String>,
+        /// Enable wiki (true/false).
+        #[arg(long, value_parser = ["true", "false"])]
+        enable_wiki: Option<String>,
+        /// Enable issues (true/false).
+        #[arg(long, value_parser = ["true", "false"])]
+        enable_issues: Option<String>,
+        /// Enable projects (true/false).
+        #[arg(long, value_parser = ["true", "false"])]
+        enable_projects: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Transfer a repository to another user or organization.
+    Transfer {
+        /// Target user or organization.
+        target: String,
+        /// Repository to transfer (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// New name for the repository after transfer.
+        #[arg(long)]
+        new_name: Option<String>,
+        /// Team slug to grant access in the new organization (repeatable).
+        #[arg(long)]
+        team: Vec<String>,
+        /// Skip confirmation prompt.
+        #[arg(long)]
+        yes: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor auth`.
