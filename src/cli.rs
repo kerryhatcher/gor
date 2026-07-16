@@ -729,6 +729,71 @@ pub enum LabelCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Create a label.
+    Create {
+        /// Label name.
+        name: String,
+        /// Label color (hex, without #). Auto-generated if omitted.
+        #[arg(long)]
+        color: Option<String>,
+        /// Label description.
+        #[arg(long)]
+        description: Option<String>,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Edit a label.
+    Edit {
+        /// Current label name.
+        name: String,
+        /// New label name.
+        #[arg(long)]
+        rename: Option<String>,
+        /// New label color (hex, without #).
+        #[arg(long)]
+        color: Option<String>,
+        /// New label description.
+        #[arg(long)]
+        description: Option<String>,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Delete a label.
+    Delete {
+        /// Label name.
+        name: String,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Skip the confirmation prompt.
+        #[arg(short = 'y', long)]
+        yes: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Clone labels from another repository.
+    Clone {
+        /// Source repository to clone labels from (OWNER/REPO format).
+        source: String,
+        /// Target repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Overwrite existing labels in the target repo.
+        #[arg(long)]
+        force: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor release`.

@@ -5,7 +5,7 @@ phase: 1
 endpoints:
   - GET /repos/{owner}/{repo}/labels
   - POST /repos/{owner}/{repo}/labels
-status: todo
+status: done
 blockedBy: [label-list]
 blocks: []
 ---
