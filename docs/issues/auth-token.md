@@ -5,7 +5,7 @@ phase: 4
 endpoints:
   - PATCH /applications/{client_id}/token
   - POST /applications/{client_id}/token
-status: todo
+status: done
 blockedBy: [auth-login]
 blocks: []
 ---

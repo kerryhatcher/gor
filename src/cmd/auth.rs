@@ -32,6 +32,17 @@ pub fn run(cmd: AuthCommand) -> anyhow::Result<()> {
         AuthCommand::SetupGit { hostname } => {
             setup_git(hostname.as_deref().unwrap_or("github.com"))
         }
+        AuthCommand::Token {
+            hostname,
+            refresh,
+            scopes,
+            secure,
+        } => token(
+            hostname.as_deref().unwrap_or("github.com"),
+            refresh,
+            &scopes,
+            secure,
+        ),
     }
 }
 
@@ -186,6 +197,84 @@ fn logout(hostname: &str) -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("failed to remove token: {e}"))?;
     println!("Logged out of {hostname}");
     Ok(())
+}
+
+/// Print or refresh the authentication token for the given host.
+///
+/// When `refresh` is true, runs the OAuth device flow to obtain a new token.
+/// Optional `scopes` can be specified to request additional OAuth scopes.
+/// When `secure` is true, only the first and last 4 characters are shown.
+///
+/// # Errors
+///
+/// Returns an error if no token is found, the device flow fails,
+/// or the keyring cannot be read.
+fn token(hostname: &str, refresh: bool, scopes: &[String], secure: bool) -> anyhow::Result<()> {
+    if refresh {
+        let host = Host::new(hostname);
+
+        // Build the scopes string from the provided scopes, or use defaults.
+        let scope_str = if scopes.is_empty() {
+            None
+        } else {
+            Some(scopes.join(","))
+        };
+
+        // Start the OAuth device flow.
+        let device_resp = device::request_device_code(&host, scope_str.as_deref())
+            .map_err(|e| anyhow::anyhow!("failed to request device code: {e}"))?;
+
+        // Show the user the code and URL.
+        device::display_instructions(&device_resp.user_code, &device_resp.verification_uri);
+
+        // Poll for the token.
+        let access_token = device::poll_for_token(
+            &host,
+            &device_resp.device_code,
+            device_resp.interval,
+            device_resp.expires_in,
+        )
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+        // Store the new token.
+        crate::keyring_store::set_token(hostname, &access_token)
+            .map_err(|e| anyhow::anyhow!("failed to store token: {e}"))?;
+
+        // Print the token.
+        print_token(&access_token, secure);
+        return Ok(());
+    }
+
+    // Try to get the token from the keyring first.
+    let token = crate::keyring_store::get_token(hostname)
+        .map_err(|e| anyhow::anyhow!("failed to read token: {e}"))?
+        .or_else(|| std::env::var("GITHUB_TOKEN").ok())
+        .or_else(|| std::env::var("GH_TOKEN").ok());
+
+    match token {
+        Some(t) => {
+            print_token(&t, secure);
+            Ok(())
+        }
+        None => anyhow::bail!(
+            "no token found for {hostname}. Run 'gor auth login' first or set GITHUB_TOKEN."
+        ),
+    }
+}
+
+/// Print a token to stdout, optionally masking it for security.
+///
+/// When `secure` is true, only the first 4 and last 4 characters are shown
+/// with `...` in between. If the token is 8 characters or fewer, it is
+/// printed in full even in secure mode.
+fn print_token(token: &str, secure: bool) {
+    if secure && token.len() > 8 {
+        let first4 = &token[..4];
+        let last4 = &token[token.len() - 4..];
+        println!("{first4}...{last4}");
+    } else {
+        println!("{token}");
+    }
 }
 
 /// Show the current authentication status.

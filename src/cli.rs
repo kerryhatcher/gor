@@ -403,6 +403,21 @@ pub enum AuthCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Print or refresh the authentication token.
+    Token {
+        /// GitHub hostname (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+        /// Refresh the stored token via the OAuth device flow.
+        #[arg(long)]
+        refresh: bool,
+        /// Request additional OAuth scopes during refresh (repeatable).
+        #[arg(short = 's', long)]
+        scopes: Vec<String>,
+        /// Mask the token output (show only first and last few characters).
+        #[arg(long)]
+        secure: bool,
+    },
 }
 
 /// Subcommands for `gor pr`.
