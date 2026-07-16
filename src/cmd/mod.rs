@@ -3,15 +3,20 @@
 //! Each subcommand lives in its own module. The [`dispatch`] function
 //! routes parsed CLI arguments to the appropriate command handler.
 
+pub mod alias;
 pub mod api;
 pub mod auth;
+pub mod browse;
 pub mod config;
+pub mod gist;
 pub mod issue;
 pub mod label;
 pub mod pr;
 pub mod release;
 pub mod repo;
+pub mod search;
 pub mod util;
+pub mod workflow;
 
 use crate::cli::{Args, Command};
 
@@ -31,5 +36,10 @@ pub fn dispatch(args: Args) -> anyhow::Result<()> {
         Command::Config(cmd) => config::run(cmd, args.hostname.as_deref()),
         Command::Label(cmd) => label::run(cmd),
         Command::Release(cmd) => release::run(cmd),
+        Command::Browse(cmd) => browse::run(cmd, args.hostname.as_deref()),
+        Command::Gist(cmd) => gist::run(cmd),
+        Command::Search(cmd) => search::run(cmd),
+        Command::Workflow(cmd) => workflow::run(cmd),
+        Command::Alias(cmd) => alias::run(cmd),
     }
 }

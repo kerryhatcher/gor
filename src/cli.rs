@@ -49,6 +49,20 @@ pub enum Command {
     /// Work with releases.
     #[command(subcommand)]
     Release(ReleaseCommand),
+    /// Open a repository in the browser.
+    Browse(BrowseCommand),
+    /// Work with gists.
+    #[command(subcommand)]
+    Gist(GistCommand),
+    /// Search GitHub.
+    #[command(subcommand)]
+    Search(SearchCommand),
+    /// Work with GitHub Actions workflows.
+    #[command(subcommand)]
+    Workflow(WorkflowCommand),
+    /// Manage command aliases.
+    #[command(subcommand)]
+    Alias(AliasCommand),
 }
 
 /// Arguments for `gor api`.
@@ -1057,6 +1071,234 @@ pub enum ReleaseCommand {
         /// Skip assets whose file already exists.
         #[arg(long)]
         skip_existing: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+}
+
+/// Arguments for `gor browse`.
+#[derive(clap::Args, Debug)]
+pub struct BrowseCommand {
+    /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+    #[arg(short = 'R', long)]
+    pub repo: Option<String>,
+    /// Open a specific branch or tree.
+    #[arg(short = 'b', long)]
+    pub branch: Option<String>,
+    /// Open a specific commit.
+    #[arg(short = 'c', long)]
+    pub commit: Option<String>,
+    /// Open the projects tab.
+    #[arg(long)]
+    pub projects: bool,
+    /// Open the wiki.
+    #[arg(long)]
+    pub wiki: bool,
+    /// Open the settings page.
+    #[arg(long)]
+    pub settings: bool,
+    /// Open a specific issue by number.
+    #[arg(short = 'i', long)]
+    pub issue: Option<u64>,
+    /// Open a specific pull request by number.
+    #[arg(short = 'p', long)]
+    pub pr: Option<u64>,
+    /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+    #[arg(long, env = "GH_HOST")]
+    pub hostname: Option<String>,
+}
+
+/// Subcommands for `gor gist`.
+#[derive(Subcommand, Debug)]
+pub enum GistCommand {
+    /// List gists.
+    List {
+        /// List public gists.
+        #[arg(long)]
+        public: bool,
+        /// List secret gists.
+        #[arg(long)]
+        secret: bool,
+        /// List gists for a specific user (public only).
+        #[arg(long)]
+        user: Option<String>,
+        /// Maximum number of gists to show (default: 30).
+        #[arg(short = 'L', long, default_value = "30")]
+        limit: u32,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Create a gist.
+    Create {
+        /// Files to include in the gist.
+        files: Vec<String>,
+        /// Gist description.
+        #[arg(long)]
+        desc: Option<String>,
+        /// Create a public gist (default: secret).
+        #[arg(long)]
+        public: bool,
+        /// Override the filename in the gist.
+        #[arg(long)]
+        filename: Option<String>,
+        /// Open the new gist in the browser.
+        #[arg(short = 'w', long)]
+        web: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+}
+
+/// Subcommands for `gor search`.
+#[derive(Subcommand, Debug)]
+pub enum SearchCommand {
+    /// Search repositories.
+    Repos {
+        /// Search query.
+        query: Vec<String>,
+        /// Filter by primary language.
+        #[arg(long)]
+        language: Option<String>,
+        /// Filter by repository topic.
+        #[arg(long)]
+        topic: Option<String>,
+        /// Filter by star count range (e.g., ">100", "10..50").
+        #[arg(long)]
+        stars: Option<String>,
+        /// Sort by: stars, forks, updated, best-match.
+        #[arg(long, default_value = "best-match")]
+        sort: String,
+        /// Sort order: asc or desc.
+        #[arg(long, default_value = "desc")]
+        order: String,
+        /// Maximum number of results (default: 30).
+        #[arg(short = 'L', long, default_value = "30")]
+        limit: u32,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// Open the search results in the browser.
+        #[arg(short = 'w', long)]
+        web: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Search code.
+    Code {
+        /// Search query.
+        query: Vec<String>,
+        /// Filter by language.
+        #[arg(long)]
+        language: Option<String>,
+        /// Search within a specific repository (OWNER/REPO).
+        #[arg(long)]
+        repo: Option<String>,
+        /// Maximum number of results (default: 30).
+        #[arg(short = 'L', long, default_value = "30")]
+        limit: u32,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// Open the search results in the browser.
+        #[arg(short = 'w', long)]
+        web: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Search issues and pull requests.
+    Issues {
+        /// Search query.
+        query: Vec<String>,
+        /// Filter by type: issue, pr.
+        #[arg(long)]
+        r#type: Option<String>,
+        /// Filter by state: open, closed.
+        #[arg(long)]
+        state: Option<String>,
+        /// Filter by labels (comma-separated).
+        #[arg(long)]
+        labels: Option<String>,
+        /// Maximum number of results (default: 30).
+        #[arg(short = 'L', long, default_value = "30")]
+        limit: u32,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// Open the search results in the browser.
+        #[arg(short = 'w', long)]
+        web: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Search commits.
+    Commits {
+        /// Search query.
+        query: Vec<String>,
+        /// Filter by author.
+        #[arg(long)]
+        author: Option<String>,
+        /// Search within a specific repository (OWNER/REPO).
+        #[arg(long)]
+        repo: Option<String>,
+        /// Maximum number of results (default: 30).
+        #[arg(short = 'L', long, default_value = "30")]
+        limit: u32,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// Open the search results in the browser.
+        #[arg(short = 'w', long)]
+        web: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+}
+
+/// Subcommands for `gor workflow`.
+#[derive(Subcommand, Debug)]
+pub enum WorkflowCommand {
+    /// List workflows in a repository.
+    List {
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Maximum number of workflows to show (default: 30).
+        #[arg(short = 'L', long, default_value = "30")]
+        limit: u32,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+}
+
+/// Subcommands for `gor alias`.
+#[derive(Subcommand, Debug)]
+pub enum AliasCommand {
+    /// List aliases.
+    List {
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Set an alias.
+    Set {
+        /// Alias name.
+        name: String,
+        /// Command to alias (with arguments).
+        command: Vec<String>,
         /// GitHub hostname for GitHub Enterprise Server (default: github.com).
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,

@@ -4,7 +4,7 @@ priority: P2
 phase: 2
 endpoints:
   - GET /search/code
-status: todo
+status: done
 blockedBy: [auth-login]
 blocks: []
 ---

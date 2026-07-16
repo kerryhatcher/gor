@@ -5,7 +5,7 @@ phase: 2
 endpoints:
   - GET /gists
   - GET /users/{username}/gists
-status: todo
+status: done
 blockedBy: [auth-login]
 blocks: [gist-view]
 ---
