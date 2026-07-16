@@ -4,7 +4,9 @@ priority: P2
 phase: 3
 endpoints:
   - POST /user/gpg_keys
----
+status: todo
+blockedBy: [auth-login]
+blocks: []
 
 # GPG Key Add
 

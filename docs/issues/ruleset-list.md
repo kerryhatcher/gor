@@ -4,6 +4,9 @@ priority: P2
 phase: 4
 endpoints:
   - GET /repos/{owner}/{repo}/rulesets
+status: todo
+blockedBy: [repo-view]
+blocks: [ruleset-view]
 ---
 
 # Ruleset List

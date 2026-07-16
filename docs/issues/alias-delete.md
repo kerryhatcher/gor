@@ -3,6 +3,9 @@ tags: [alias, write]
 priority: P2
 phase: 3
 endpoints: []
+status: todo
+blockedBy: [alias-list]
+blocks: []
 ---
 
 # Alias Delete

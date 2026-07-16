@@ -4,6 +4,9 @@ priority: P2
 phase: 2
 endpoints:
   - PUT /repos/{owner}/{repo}/actions/workflows/{id}/enable
+status: todo
+blockedBy: [workflow-view]
+blocks: []
 ---
 
 # Workflow Enable / Disable

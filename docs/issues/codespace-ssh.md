@@ -4,6 +4,9 @@ priority: P2
 phase: 4
 endpoints:
   - GET /user/codespaces/{codespace_name}/ssh
+status: todo
+blockedBy: [codespace-list]
+blocks: []
 ---
 
 # Codespace SSH

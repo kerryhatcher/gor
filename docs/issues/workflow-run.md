@@ -4,6 +4,9 @@ priority: P2
 phase: 2
 endpoints:
   - POST /repos/{owner}/{repo}/actions/workflows/{id}/dispatches
+status: todo
+blockedBy: [workflow-view]
+blocks: []
 ---
 
 # Workflow Run (Dispatch)

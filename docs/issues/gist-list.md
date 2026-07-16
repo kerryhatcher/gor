@@ -5,6 +5,9 @@ phase: 2
 endpoints:
   - GET /gists
   - GET /users/{username}/gists
+status: todo
+blockedBy: [auth-login]
+blocks: [gist-view]
 ---
 
 # Gist List

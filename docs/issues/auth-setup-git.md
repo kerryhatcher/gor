@@ -3,6 +3,9 @@ tags: [auth, git]
 priority: P0
 phase: 0
 endpoints: []
+status: todo
+blockedBy: [auth-login]
+blocks: []
 ---
 
 # Auth Setup Git

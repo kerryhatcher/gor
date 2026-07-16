@@ -4,6 +4,9 @@ priority: P2
 phase: 3
 endpoints:
   - POST /projects/{project_id}/items
+status: todo
+blockedBy: [project-view]
+blocks: []
 ---
 
 # Project Item Add

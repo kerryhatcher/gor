@@ -4,6 +4,9 @@ priority: P1
 phase: 1
 endpoints:
   - PATCH /repos/{owner}/{repo}/releases/{id}
+status: todo
+blockedBy: [release-view]
+blocks: []
 ---
 
 # Release Edit

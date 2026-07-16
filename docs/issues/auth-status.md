@@ -4,6 +4,9 @@ priority: P0
 phase: 0
 endpoints:
   - GET /user
+status: todo
+blockedBy: [auth-login]
+blocks: []
 ---
 
 # Auth Status

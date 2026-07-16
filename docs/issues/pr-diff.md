@@ -4,6 +4,9 @@ priority: P1
 phase: 1
 endpoints:
   - GET /repos/{owner}/{repo}/pulls/{number}
+status: todo
+blockedBy: [pr-view]
+blocks: []
 ---
 
 # PR Diff

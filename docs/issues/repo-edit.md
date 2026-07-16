@@ -4,6 +4,9 @@ priority: P1
 phase: 1
 endpoints:
   - PATCH /repos/{owner}/{repo}
+status: todo
+blockedBy: [repo-view]
+blocks: []
 ---
 
 # Repo Edit

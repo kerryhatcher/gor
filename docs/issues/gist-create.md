@@ -4,6 +4,9 @@ priority: P2
 phase: 2
 endpoints:
   - POST /gists
+status: todo
+blockedBy: [auth-login]
+blocks: []
 ---
 
 # Gist Create

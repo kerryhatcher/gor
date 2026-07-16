@@ -4,6 +4,9 @@ priority: P2
 phase: 3
 endpoints:
   - GET /projects/{project_id}
+status: todo
+blockedBy: [project-list]
+blocks: [project-item-add]
 ---
 
 # Project View

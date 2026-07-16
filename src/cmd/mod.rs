@@ -3,6 +3,7 @@
 //! Each subcommand lives in its own module. The [`dispatch`] function
 //! routes parsed CLI arguments to the appropriate command handler.
 
+pub mod auth;
 pub mod config;
 pub mod util;
 
@@ -16,6 +17,7 @@ use crate::cli::{Args, Command};
 #[allow(clippy::print_stdout)]
 pub fn dispatch(args: Args) -> anyhow::Result<()> {
     match args.command {
+        Command::Auth(cmd) => auth::run(cmd),
         Command::Repo { owner_repo } => {
             tracing::info!("Viewing repository: {owner_repo}");
             println!("Repository: {owner_repo}");

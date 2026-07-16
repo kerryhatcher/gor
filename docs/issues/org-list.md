@@ -4,6 +4,9 @@ priority: P2
 phase: 3
 endpoints:
   - GET /user/orgs
+status: todo
+blockedBy: [auth-login]
+blocks: [org-view]
 ---
 
 # Org List

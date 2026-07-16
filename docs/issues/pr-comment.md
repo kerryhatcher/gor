@@ -4,6 +4,9 @@ priority: P0
 phase: 0
 endpoints:
   - POST /repos/{owner}/{repo}/issues/{number}/comments
+status: todo
+blockedBy: [pr-view]
+blocks: []
 ---
 
 # PR Comment

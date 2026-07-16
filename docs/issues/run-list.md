@@ -4,6 +4,9 @@ priority: P2
 phase: 2
 endpoints:
   - GET /repos/{owner}/{repo}/actions/runs
+status: todo
+blockedBy: [workflow-view]
+blocks: [run-view]
 ---
 
 # Run List

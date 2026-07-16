@@ -4,6 +4,9 @@ priority: P0
 phase: 0
 endpoints:
   - PATCH /repos/{owner}/{repo}/pulls/{number}
+status: todo
+blockedBy: [pr-view]
+blocks: []
 ---
 
 # PR Close / Reopen

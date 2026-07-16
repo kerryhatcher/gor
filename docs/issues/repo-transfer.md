@@ -4,6 +4,9 @@ priority: P1
 phase: 1
 endpoints:
   - POST /repos/{owner}/{repo}/transfer
+status: todo
+blockedBy: [repo-view]
+blocks: []
 ---
 
 # Repo Transfer

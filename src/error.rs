@@ -35,4 +35,16 @@ pub enum GorError {
     /// An I/O error occurred.
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
+
+    /// A keyring operation failed.
+    #[error("keyring error: {0}")]
+    Keyring(String),
+
+    /// The OAuth device flow timed out waiting for user authorization.
+    #[error("device flow timed out: {0}")]
+    DeviceTimeout(String),
+
+    /// The OAuth device flow was declined by the user.
+    #[error("device flow authorization declined")]
+    DeviceDeclined,
 }

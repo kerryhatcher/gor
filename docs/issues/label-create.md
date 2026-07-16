@@ -4,6 +4,9 @@ priority: P1
 phase: 1
 endpoints:
   - POST /repos/{owner}/{repo}/labels
+status: todo
+blockedBy: [repo-view]
+blocks: []
 ---
 
 # Label Create

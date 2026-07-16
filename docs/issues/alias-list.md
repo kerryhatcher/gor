@@ -3,6 +3,9 @@ tags: [alias, read]
 priority: P2
 phase: 3
 endpoints: []
+status: todo
+blockedBy: [auth-login]
+blocks: [alias-delete]
 ---
 
 # Alias List

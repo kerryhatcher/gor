@@ -4,6 +4,9 @@ priority: P0
 phase: 0
 endpoints:
   - "ANY /{path}"
+status: todo
+blockedBy: [auth-login]
+blocks: [api-graphql]
 ---
 
 # API — Arbitrary REST Calls

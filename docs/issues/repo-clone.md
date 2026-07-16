@@ -4,6 +4,9 @@ priority: P0
 phase: 0
 endpoints:
   - GET /repos/{owner}/{repo}
+status: todo
+blockedBy: [auth-login]
+blocks: []
 ---
 
 # Repo Clone

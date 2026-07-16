@@ -3,6 +3,9 @@ tags: [browse]
 priority: P2
 phase: 2
 endpoints: []
+status: todo
+blockedBy: [repo-view]
+blocks: []
 ---
 
 # Browse

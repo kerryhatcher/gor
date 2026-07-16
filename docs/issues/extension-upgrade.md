@@ -3,6 +3,9 @@ tags: [extension, write]
 priority: P2
 phase: 3
 endpoints: []
+status: todo
+blockedBy: [extension-list]
+blocks: []
 ---
 
 # Extension Upgrade

@@ -28,10 +28,14 @@
 #![deny(missing_docs)]
 #![deny(unsafe_code)]
 
+pub mod auth;
 pub mod cli;
+pub mod client;
 pub mod cmd;
 pub mod config;
 pub mod error;
+pub mod host;
+pub mod keyring_store;
 
 use clap::Parser;
 use cli::Args;

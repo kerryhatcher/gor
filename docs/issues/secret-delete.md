@@ -5,7 +5,9 @@ phase: 3
 endpoints:
   - DELETE /repos/{owner}/{repo}/actions/secrets/{name}
   - DELETE /orgs/{org}/actions/secrets/{name}
----
+status: todo
+blockedBy: [secret-list]
+blocks: []
 
 # Secret Delete
 

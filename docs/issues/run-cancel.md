@@ -4,6 +4,9 @@ priority: P2
 phase: 2
 endpoints:
   - POST /repos/{owner}/{repo}/actions/runs/{id}/cancel
+status: todo
+blockedBy: [run-view]
+blocks: []
 ---
 
 # Run Cancel

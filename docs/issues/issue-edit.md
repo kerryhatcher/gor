@@ -4,6 +4,9 @@ priority: P1
 phase: 1
 endpoints:
   - PATCH /repos/{owner}/{repo}/issues/{number}
+status: todo
+blockedBy: [issue-view]
+blocks: []
 ---
 
 # Issue Edit

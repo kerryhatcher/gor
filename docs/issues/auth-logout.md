@@ -3,6 +3,9 @@ tags: [auth, write]
 priority: P0
 phase: 0
 endpoints: []
+status: todo
+blockedBy: [auth-login]
+blocks: []
 ---
 
 # Auth Logout

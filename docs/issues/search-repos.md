@@ -4,6 +4,9 @@ priority: P2
 phase: 2
 endpoints:
   - GET /search/repositories
+status: todo
+blockedBy: [auth-login]
+blocks: []
 ---
 
 # Search Repos

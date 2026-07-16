@@ -3,6 +3,9 @@ tags: [extension, read]
 priority: P2
 phase: 3
 endpoints: []
+status: todo
+blockedBy: [auth-login]
+blocks: [extension-remove, extension-upgrade]
 ---
 
 # Extension List

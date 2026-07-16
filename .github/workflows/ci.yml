@@ -19,18 +19,18 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
 
       - name: Install system dependencies
         run: sudo apt-get update -y && sudo apt-get install -y libdbus-1-dev
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9  # v1
         with:
           components: rustfmt, clippy
 
       - name: Cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1
 
       - name: Check formatting
         run: cargo fmt --all --check
@@ -42,10 +42,10 @@ jobs:
         run: cargo install cargo-deny --locked
 
       - name: Cargo deny
-        run: cargo deny check bans licenses sources
+        run: cargo deny check advisories bans licenses sources
 
       - name: Typos
-        uses: crate-ci/typos@master
+        uses: crate-ci/typos@bee27e3a4fd1ea2111cf90ab89cd076c870fce14  # v1.48.0
 
       - name: Install cargo-shear
         run: cargo install cargo-shear --locked
@@ -58,13 +58,13 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9  # v1
 
       - name: Cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1
 
       - name: Build documentation
         run: RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
@@ -81,20 +81,20 @@ jobs:
         os: [ubuntu-24.04, macos-14, windows-2022]
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
 
       - name: Install system dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update -y && sudo apt-get install -y libdbus-1-dev
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9  # v1
 
       - name: Cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1
 
       - name: Install nextest
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853  # v2.83.2
         with:
           tool: nextest
 
@@ -109,21 +109,21 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
 
       - name: Install system dependencies
         run: sudo apt-get update -y && sudo apt-get install -y libdbus-1-dev
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9  # v1
         with:
           components: llvm-tools
 
       - name: Cache
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4  # v2.9.1
 
       - name: Install cargo-llvm-cov and nextest
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@43aecc8d72668fbcfe75c31400bc4f890f1c5853  # v2.83.2
         with:
           tool: cargo-llvm-cov,nextest
 
@@ -131,7 +131,7 @@ jobs:
         run: cargo llvm-cov nextest --workspace --all-features --lcov --output-path lcov.info
 
       - name: Upload to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f  # v6.0.2
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
@@ -142,13 +142,13 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
 
       - name: Install system dependencies
         run: sudo apt-get update -y && sudo apt-get install -y libdbus-1-dev
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9  # v1
 
       - name: Install MSRV toolchain
         run: rustup toolchain install 1.86.0 --profile minimal --no-self-update
@@ -156,27 +156,15 @@ jobs:
       - name: Check with MSRV
         run: cargo +1.86.0 check --locked --all-features
 
-  security:
-    name: Security audit
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Security audit
-        uses: rustsec/audit-check@v2.0.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
   trivy:
     name: Trivy scan
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620bcf913e5ce36c25  # v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -191,7 +179,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6.0.3
 
       - name: Run Kingfisher secret scanner
         run: |

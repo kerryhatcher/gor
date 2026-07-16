@@ -4,6 +4,9 @@ priority: P4
 phase: 4
 endpoints:
   - DELETE /repos/{owner}/{repo}/actions/caches
+status: todo
+blockedBy: [cache-list]
+blocks: []
 ---
 
 # Cache Delete

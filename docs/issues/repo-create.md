@@ -5,6 +5,9 @@ phase: 1
 endpoints:
   - POST /user/repos
   - POST /orgs/{org}/repos
+status: todo
+blockedBy: [auth-login]
+blocks: []
 ---
 
 # Repo Create

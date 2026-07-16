@@ -4,6 +4,9 @@ priority: P1
 phase: 1
 endpoints:
   - GET /repos/{owner}/{repo}/labels
+status: todo
+blockedBy: [repo-view]
+blocks: [label-edit, label-delete, label-clone]
 ---
 
 # Label List

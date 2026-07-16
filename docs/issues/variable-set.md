@@ -7,7 +7,9 @@ endpoints:
   - POST /orgs/{org}/actions/variables
   - PATCH /repos/{owner}/{repo}/actions/variables/{name}
   - PATCH /orgs/{org}/actions/variables/{name}
----
+status: todo
+blockedBy: [repo-view]
+blocks: []
 
 # Variable Set
 

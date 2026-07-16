@@ -4,6 +4,9 @@ priority: P0
 phase: 0
 endpoints:
   - PUT /repos/{owner}/{repo}/pulls/{number}/merge
+status: todo
+blockedBy: [pr-view]
+blocks: []
 ---
 
 # PR Merge

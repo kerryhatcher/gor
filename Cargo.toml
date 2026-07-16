@@ -48,7 +48,7 @@ must_use_candidate = "allow"
 too_many_lines = "allow"
 
 [workspace.metadata.cargo-shear]
-ignored = ["keyring", "dirs", "gix", "miette", "indicatif", "console"]
+ignored = ["dirs", "gix", "miette", "indicatif", "console"]
 
 [package]
 name = "gor"
@@ -88,7 +88,7 @@ indicatif = { workspace = true }
 console = { workspace = true }
 
 [dev-dependencies]
-# Test dependencies will be added as integration tests are implemented.
+# Additional test dependencies for integration tests:
 # - assert_cmd, assert_fs: CLI integration testing
 # - insta: snapshot testing
 # - tempfile: temporary file/directory fixtures

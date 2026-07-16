@@ -6,6 +6,9 @@ endpoints:
   - GET /user/repos
   - GET /users/{username}/repos
   - GET /orgs/{org}/repos
+status: todo
+blockedBy: [auth-login]
+blocks: []
 ---
 
 # Repo List

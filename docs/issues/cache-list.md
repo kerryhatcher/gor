@@ -4,6 +4,9 @@ priority: P4
 phase: 4
 endpoints:
   - GET /repos/{owner}/{repo}/actions/caches
+status: todo
+blockedBy: [repo-view]
+blocks: [cache-delete]
 ---
 
 # Cache List

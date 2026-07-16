@@ -5,6 +5,9 @@ phase: 1
 endpoints:
   - GET /repos/{owner}/{repo}/labels
   - POST /repos/{owner}/{repo}/labels
+status: todo
+blockedBy: [label-list]
+blocks: []
 ---
 
 # Label Clone

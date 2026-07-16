@@ -4,6 +4,9 @@ priority: P0
 phase: 0
 endpoints:
   - GET /repos/{owner}/{repo}
+status: todo
+blockedBy: [auth-login]
+blocks: [repo-delete, repo-edit, repo-fork, repo-sync, repo-transfer, pr-list, issue-list, release-create, release-list, label-create, label-list, workflow-list, secret-set, secret-list, variable-set, variable-list, ruleset-list, cache-list, browse]
 ---
 
 # Repo View

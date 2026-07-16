@@ -189,6 +189,40 @@ CI runs on every push and PR. Eight parallel jobs:
 
 ---
 
+## User Stories / Issues
+
+User stories and feature issues are tracked as markdown files under `./docs/issues/`.
+Each file uses YAML frontmatter for metadata and follows a consistent template.
+
+**Frontmatter fields:**
+- `tags` — list of relevant tags (e.g., `[repo, create]`)
+- `priority` — P0 (critical), P1 (high), P2 (medium), P3 (low), P4 (nice-to-have)
+- `phase` — roadmap phase (0–4, per the implementation roadmap)
+- `endpoints` — GitHub REST API endpoints used
+- `status` — `todo`, `in_progress`, `done`
+- `blockedBy` — list of story names (without `.md`) that must be completed first
+- `blocks` — list of story names (without `.md`) that depend on this story
+
+**Dependency graph:**
+- `auth-login` is the root — it blocks 26 stories (all auth, repo, gist, search, extensions, aliases, keys, orgs, codespaces, attestation).
+- `repo-view` is the next critical node — it blocks 18 stories (PR, issue, release, label, workflow, secrets, variables, rulesets, cache, browse).
+- Chains follow the pattern: **auth → list → view → mutate** (e.g., `auth-login → repo-view → pr-list → pr-view → pr-merge`).
+- Leaf nodes (empty `blocks`) are terminal CRUD operations like `pr-close`, `issue-close`, `release-delete`.
+
+**File naming:** `<command>-<subcommand>.md` (e.g., `repo-create.md`, `pr-review.md`).
+
+**Template sections:**
+- `# Title` — feature name
+- `## As a` — user persona
+- `## I want` — goal statement
+- `## Acceptance criteria` — bullet list of verifiable outcomes
+- `## Implementation notes` — technical guidance (optional)
+- `## Scenarios` — Gherkin-style behavior scenarios (optional)
+
+Always create a story file before implementing a new command or subcommand.
+
+---
+
 ## Adding a New Command
 
 1. Define the CLI args in `src/cli.rs` (Args struct + Subcommand variant).

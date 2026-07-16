@@ -26,6 +26,9 @@ pub struct Args {
 /// Top-level subcommands for `gor`.
 #[derive(Subcommand, Debug)]
 pub enum Command {
+    /// Authenticate with a GitHub account.
+    #[command(subcommand)]
+    Auth(AuthCommand),
     /// View a repository.
     Repo {
         /// Repository to view (OWNER/REPO format).
@@ -34,6 +37,36 @@ pub enum Command {
     /// Manage configuration values.
     #[command(subcommand)]
     Config(ConfigCommand),
+}
+
+/// Subcommands for `gor auth`.
+#[derive(Subcommand, Debug)]
+pub enum AuthCommand {
+    /// Log in to a GitHub account using the OAuth device flow.
+    Login {
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+        /// Request specific OAuth scopes (comma-separated).
+        /// Default: repo,read:org,workflow,gist
+        #[arg(long)]
+        scopes: Option<String>,
+        /// Read token from stdin instead of starting the device flow.
+        #[arg(long, conflicts_with = "scopes")]
+        with_token: bool,
+    },
+    /// Log out of a GitHub account.
+    Logout {
+        /// GitHub hostname (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Show the current authentication status.
+    Status {
+        /// GitHub hostname (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor config`.

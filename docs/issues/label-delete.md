@@ -4,6 +4,9 @@ priority: P1
 phase: 1
 endpoints:
   - DELETE /repos/{owner}/{repo}/labels/{name}
+status: todo
+blockedBy: [label-list]
+blocks: []
 ---
 
 # Label Delete

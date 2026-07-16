@@ -5,6 +5,9 @@ phase: 1
 endpoints:
   - GET /repos/{owner}/{repo}/releases/{id}
   - GET /repos/{owner}/{repo}/releases/tags/{tag}
+status: todo
+blockedBy: [release-list]
+blocks: [release-delete, release-edit, release-upload, release-download]
 ---
 
 # Release View

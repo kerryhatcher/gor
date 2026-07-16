@@ -4,6 +4,9 @@ priority: P0
 phase: 0
 endpoints:
   - PATCH /repos/{owner}/{repo}/issues/{number}
+status: todo
+blockedBy: [issue-view]
+blocks: []
 ---
 
 # Issue Close / Reopen

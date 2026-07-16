@@ -4,6 +4,9 @@ priority: P0
 phase: 0
 endpoints:
   - GET /repos/{owner}/{repo}/issues/{number}
+status: todo
+blockedBy: [issue-list]
+blocks: [issue-close, issue-comment, issue-edit]
 ---
 
 # Issue View

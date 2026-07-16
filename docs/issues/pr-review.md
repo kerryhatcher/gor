@@ -4,6 +4,9 @@ priority: P1
 phase: 1
 endpoints:
   - POST /repos/{owner}/{repo}/pulls/{number}/reviews
+status: todo
+blockedBy: [pr-view]
+blocks: []
 ---
 
 # PR Review

@@ -4,6 +4,9 @@ priority: P2
 phase: 2
 endpoints:
   - DELETE /gists/{id}
+status: todo
+blockedBy: [gist-view]
+blocks: []
 ---
 
 # Gist Delete
