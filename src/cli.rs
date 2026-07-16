@@ -73,6 +73,27 @@ pub enum Command {
     /// Manage GPG keys.
     #[command(subcommand)]
     GpgKey(GpgKeyCommand),
+    /// List and manage secrets.
+    #[command(subcommand)]
+    Secret(SecretCommand),
+    /// List and manage Actions variables.
+    #[command(subcommand)]
+    Variable(VariableCommand),
+    /// Work with GitHub Actions workflow runs.
+    #[command(subcommand)]
+    Run(RunCommand),
+    /// List and manage repository caches.
+    #[command(subcommand)]
+    Cache(CacheCommand),
+    /// Work with repository rulesets.
+    #[command(subcommand)]
+    Ruleset(RulesetCommand),
+    /// Manage GitHub CLI extensions.
+    #[command(subcommand)]
+    Extension(ExtensionCommand),
+    /// Work with GitHub Codespaces.
+    #[command(subcommand)]
+    Codespace(CodespaceCommand),
 }
 
 /// Arguments for `gor api`.
@@ -1444,6 +1465,187 @@ pub enum GpgKeyCommand {
         /// Provide the armored key inline.
         #[arg(short = 'b', long)]
         body: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+}
+
+/// Subcommands for `gor secret`.
+#[derive(Subcommand, Debug)]
+pub enum SecretCommand {
+    /// List secrets.
+    List {
+        /// Organization to list secrets for.
+        #[arg(long)]
+        org: Option<String>,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Set a secret.
+    Set {
+        /// Secret name.
+        name: String,
+        /// Secret value body.
+        #[arg(short = 'b', long)]
+        body: Option<String>,
+        /// Read secret value from a file.
+        #[arg(short = 'f', long)]
+        file: Option<String>,
+        /// Organization to set the secret for.
+        #[arg(long)]
+        org: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+}
+
+/// Subcommands for `gor variable`.
+#[derive(Subcommand, Debug)]
+pub enum VariableCommand {
+    /// List variables.
+    List {
+        /// Organization to list variables for.
+        #[arg(long)]
+        org: Option<String>,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Set a variable.
+    Set {
+        /// Variable name.
+        name: String,
+        /// Variable value.
+        #[arg(short = 'b', long)]
+        body: Option<String>,
+        /// Read variable value from a file.
+        #[arg(short = 'f', long)]
+        file: Option<String>,
+        /// Organization to set the variable for.
+        #[arg(long)]
+        org: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+}
+
+/// Subcommands for `gor run`.
+#[derive(Subcommand, Debug)]
+pub enum RunCommand {
+    /// List workflow runs.
+    List {
+        /// Workflow filename or ID to filter by.
+        #[arg(short = 'w', long)]
+        workflow: Option<String>,
+        /// Branch to filter by.
+        #[arg(short = 'b', long)]
+        branch: Option<String>,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Maximum number of runs to show (default: 30).
+        #[arg(short = 'L', long, default_value = "30")]
+        limit: u32,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+}
+
+/// Subcommands for `gor cache`.
+#[derive(Subcommand, Debug)]
+pub enum CacheCommand {
+    /// List caches.
+    List {
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+}
+
+/// Subcommands for `gor ruleset`.
+#[derive(Subcommand, Debug)]
+pub enum RulesetCommand {
+    /// List rulesets.
+    List {
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+}
+
+/// Subcommands for `gor extension`.
+#[derive(Subcommand, Debug)]
+pub enum ExtensionCommand {
+    /// List installed extensions.
+    List {
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Install an extension.
+    Install {
+        /// Extension name or URL.
+        name: String,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+}
+
+/// Subcommands for `gor codespace`.
+#[derive(Subcommand, Debug)]
+pub enum CodespaceCommand {
+    /// List codespaces.
+    List {
+        /// Repository (OWNER/REPO format).
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Create a codespace.
+    Create {
+        /// Repository (OWNER/REPO format).
+        repo: String,
+        /// Branch to create the codespace from.
+        #[arg(short = 'b', long)]
+        branch: Option<String>,
+        /// Machine type.
+        #[arg(long)]
+        machine: Option<String>,
         /// GitHub hostname for GitHub Enterprise Server (default: github.com).
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,

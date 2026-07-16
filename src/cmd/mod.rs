@@ -46,5 +46,12 @@ pub fn dispatch(args: Args) -> anyhow::Result<()> {
         Command::Org(cmd) => org::run(cmd),
         Command::SshKey(cmd) => keys::run_ssh(cmd),
         Command::GpgKey(cmd) => keys::run_gpg(cmd),
+        Command::Secret(_cmd) => anyhow::bail!("secret command not yet implemented"),
+        Command::Variable(_cmd) => anyhow::bail!("variable command not yet implemented"),
+        Command::Run(_cmd) => anyhow::bail!("run command not yet implemented"),
+        Command::Cache(_cmd) => anyhow::bail!("cache command not yet implemented"),
+        Command::Ruleset(_cmd) => anyhow::bail!("ruleset command not yet implemented"),
+        Command::Extension(_cmd) => anyhow::bail!("extension command not yet implemented"),
+        Command::Codespace(_cmd) => anyhow::bail!("codespace command not yet implemented"),
     }
 }
