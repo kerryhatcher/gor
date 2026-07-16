@@ -19,32 +19,37 @@ pub fn run(cmd: SecretCommand) -> anyhow::Result<()> {
     match cmd {
         SecretCommand::List {
             org,
+            env,
             json,
             hostname,
-        } => list(org.as_deref(), json, hostname.as_deref()),
+        } => list(org.as_deref(), env.as_deref(), json, hostname.as_deref()),
         SecretCommand::Set {
             name,
             body,
             file,
             org,
+            env,
             hostname,
         } => set(
             &name,
             body.as_deref(),
             file.as_deref(),
             org.as_deref(),
+            env.as_deref(),
             hostname.as_deref(),
         ),
         SecretCommand::Delete {
             name,
             org,
+            env,
             hostname,
-        } => delete(&name, org.as_deref(), hostname.as_deref()),
+        } => delete(&name, org.as_deref(), env.as_deref(), hostname.as_deref()),
     }
 }
 
 fn list(
     org: Option<&str>,
+    env: Option<&str>,
     json: Option<Vec<String>>,
     hostname: Option<&str>,
 ) -> anyhow::Result<()> {
@@ -53,6 +58,16 @@ fn list(
 
     let path = if let Some(o) = org {
         format!("/orgs/{o}/actions/secrets?per_page=100")
+    } else if let Some(e) = env {
+        let spec = detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository; specify --repo or run from a repo directory"
+            )
+        })?;
+        format!(
+            "/repos/{}/{}/environments/{e}/secrets?per_page=100",
+            spec.owner, spec.repo
+        )
     } else {
         let spec = detect_remote().ok_or_else(|| {
             anyhow::anyhow!(
@@ -107,6 +122,7 @@ fn set(
     body: Option<&str>,
     file: Option<&str>,
     org: Option<&str>,
+    env: Option<&str>,
     hostname: Option<&str>,
 ) -> anyhow::Result<()> {
     let host = hostname.unwrap_or("github.com");
@@ -127,6 +143,16 @@ fn set(
 
     let path = if let Some(o) = org {
         format!("/orgs/{o}/actions/secrets/{name}")
+    } else if let Some(e) = env {
+        let spec = detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository; specify --repo or run from a repo directory"
+            )
+        })?;
+        format!(
+            "/repos/{}/{}/environments/{e}/secrets/{name}",
+            spec.owner, spec.repo
+        )
     } else {
         let spec = detect_remote().ok_or_else(|| {
             anyhow::anyhow!(
@@ -154,12 +180,27 @@ fn set(
     Ok(())
 }
 
-fn delete(name: &str, org: Option<&str>, hostname: Option<&str>) -> anyhow::Result<()> {
+fn delete(
+    name: &str,
+    org: Option<&str>,
+    env: Option<&str>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
     let host = hostname.unwrap_or("github.com");
     let client = Client::new(host).context("failed to create HTTP client")?;
 
     let path = if let Some(o) = org {
         format!("/orgs/{o}/actions/secrets/{name}")
+    } else if let Some(e) = env {
+        let spec = detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository; specify --repo or run from a repo directory"
+            )
+        })?;
+        format!(
+            "/repos/{}/{}/environments/{e}/secrets/{name}",
+            spec.owner, spec.repo
+        )
     } else {
         let spec = detect_remote().ok_or_else(|| {
             anyhow::anyhow!(

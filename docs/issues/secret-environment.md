@@ -6,7 +6,7 @@ endpoints:
   - GET /repos/{owner}/{repo}/environments/{env}/secrets
   - PUT /repos/{owner}/{repo}/environments/{env}/secrets/{name}
   - DELETE /repos/{owner}/{repo}/environments/{env}/secrets/{name}
-status: todo
+status: done
 blockedBy: [secret-list, secret-set, secret-delete]
 blocks: []
 ---
