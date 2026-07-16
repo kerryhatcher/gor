@@ -1613,6 +1613,29 @@ pub enum RunCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// View a workflow run's details and jobs.
+    View {
+        /// Run ID.
+        id: u64,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Open the run in the browser.
+        #[arg(short = 'w', long)]
+        web: bool,
+        /// Show logs for a specific job.
+        #[arg(long)]
+        log: Option<u64>,
+        /// Show logs only for failed jobs.
+        #[arg(long)]
+        log_failed: bool,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor cache`.
@@ -1640,6 +1663,23 @@ pub enum RulesetCommand {
         /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
         #[arg(short = 'R', long)]
         repo: Option<String>,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// View a ruleset's details.
+    View {
+        /// Ruleset ID.
+        id: u32,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Open the ruleset in the browser.
+        #[arg(short = 'w', long)]
+        web: bool,
         /// Output as JSON. Optionally specify comma-separated field names.
         #[arg(long, num_args = 0.., value_delimiter = ',')]
         json: Option<Vec<String>>,

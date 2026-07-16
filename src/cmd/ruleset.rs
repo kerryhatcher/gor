@@ -1,6 +1,6 @@
 //! Implementation of the `gor ruleset` subcommand.
 //!
-//! Provides repository ruleset listing.
+//! Provides repository ruleset listing and viewing.
 
 #![allow(clippy::print_stdout)]
 
@@ -22,6 +22,13 @@ pub fn run(cmd: RulesetCommand) -> anyhow::Result<()> {
             json,
             hostname,
         } => list(repo.as_deref(), json, hostname.as_deref()),
+        RulesetCommand::View {
+            id,
+            repo,
+            web,
+            json,
+            hostname,
+        } => view(id, repo.as_deref(), web, json, hostname.as_deref()),
     }
 }
 
@@ -72,6 +79,74 @@ fn list(
         let enforcement = r["enforcement"].as_str().unwrap_or("—");
         let name_truncated = crate::cmd::util::truncate(name, 30);
         println!("{id:<8}  {name_truncated:<30}  {enforcement}");
+    }
+
+    Ok(())
+}
+
+fn view(
+    id: u32,
+    repo: Option<&str>,
+    web: bool,
+    json: Option<Vec<String>>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!("could not detect repository; specify OWNER/REPO with --repo")
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let path = format!("/repos/{}/{}/rulesets/{id}", spec.owner, spec.repo);
+    let response = client.get(&path).context("failed to fetch ruleset")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("ruleset #{id} not found in repository '{spec}'");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to view ruleset: HTTP {status}");
+    }
+
+    let ruleset: serde_json::Value = response.json().context("failed to parse response")?;
+
+    if web {
+        let url = format!(
+            "https://{host}/{}/{}/settings/rules/{id}",
+            spec.owner, spec.repo
+        );
+        println!("Open {url} in your browser");
+        return Ok(());
+    }
+
+    if let Some(fields) = json {
+        let fields_ref: Option<&[String]> = if fields.is_empty() {
+            None
+        } else {
+            Some(&fields)
+        };
+        print_json(&ruleset, fields_ref);
+        return Ok(());
+    }
+
+    let name = ruleset["name"].as_str().unwrap_or("—");
+    let enforcement = ruleset["enforcement"].as_str().unwrap_or("—");
+    let target = ruleset["target"].as_str().unwrap_or("—");
+
+    println!("  Name: {name}");
+    println!("  Enforcement: {enforcement}");
+    println!("  Target: {target}");
+
+    if let Some(rules) = ruleset["rules"].as_array() {
+        println!("  Rules:");
+        for rule in rules {
+            let rule_type = rule["type"].as_str().unwrap_or("—");
+            println!("    - {rule_type}");
+        }
     }
 
     Ok(())
