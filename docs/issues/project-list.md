@@ -5,7 +5,7 @@ phase: 3
 endpoints:
   - GET /orgs/{org}/projects
   - GET /repos/{owner}/{repo}/projects
-status: todo
+status: done
 blockedBy: [org-view]
 blocks: [project-view]
 ---

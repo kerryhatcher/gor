@@ -5,6 +5,7 @@
 
 pub mod alias;
 pub mod api;
+pub mod attestation;
 pub mod auth;
 pub mod browse;
 pub mod cache;
@@ -17,6 +18,7 @@ pub mod keys;
 pub mod label;
 pub mod org;
 pub mod pr;
+pub mod project;
 pub mod release;
 pub mod repo;
 pub mod ruleset;
@@ -60,5 +62,7 @@ pub fn dispatch(args: Args) -> anyhow::Result<()> {
         Command::Ruleset(cmd) => ruleset::run(cmd),
         Command::Extension(cmd) => extension::run(cmd),
         Command::Codespace(cmd) => codespace::run(cmd),
+        Command::Project(cmd) => project::run(cmd),
+        Command::Attestation(cmd) => attestation::run(cmd),
     }
 }

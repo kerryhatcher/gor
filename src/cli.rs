@@ -94,6 +94,12 @@ pub enum Command {
     /// Work with GitHub Codespaces.
     #[command(subcommand)]
     Codespace(CodespaceCommand),
+    /// List and manage GitHub Projects.
+    #[command(subcommand)]
+    Project(ProjectCommand),
+    /// Verify artifact attestations.
+    #[command(subcommand)]
+    Attestation(AttestationCommand),
 }
 
 /// Arguments for `gor api`.
@@ -1953,6 +1959,54 @@ pub enum AliasCommand {
     Delete {
         /// Alias name to delete.
         name: String,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+}
+
+/// Subcommands for `gor project`.
+#[derive(Subcommand, Debug)]
+pub enum ProjectCommand {
+    /// List projects.
+    List {
+        /// Organization to list projects for.
+        #[arg(long, conflicts_with_all = ["owner", "repo"])]
+        org: Option<String>,
+        /// User to list projects for.
+        #[arg(long, conflicts_with_all = ["org", "repo"])]
+        owner: Option<String>,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long, conflicts_with_all = ["org", "owner"])]
+        repo: Option<String>,
+        /// Maximum number of projects to show (default: 30).
+        #[arg(short = 'L', long, default_value = "30")]
+        limit: u32,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+}
+
+/// Subcommands for `gor attestation`.
+#[derive(Subcommand, Debug)]
+pub enum AttestationCommand {
+    /// Verify an artifact attestation.
+    Verify {
+        /// File to verify.
+        file: String,
+        /// Expected artifact owner/organization.
+        #[arg(long)]
+        owner: Option<String>,
+        /// Repository to scope verification to.
+        #[arg(long)]
+        repo: Option<String>,
+        /// Local Sigstore bundle file instead of fetching from API.
+        #[arg(long)]
+        bundle: Option<String>,
         /// GitHub hostname for GitHub Enterprise Server (default: github.com).
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,

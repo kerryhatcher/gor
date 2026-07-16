@@ -4,7 +4,7 @@ priority: P2
 phase: 4
 endpoints:
   - GET /repos/{owner}/{repo}/attestations
-status: todo
+status: done
 blockedBy: [auth-login]
 blocks: []
 ---
