@@ -38,6 +38,32 @@ pub fn run(cmd: CodespaceCommand) -> anyhow::Result<()> {
             yes,
             hostname,
         } => delete(&name, repo.as_deref(), yes, hostname.as_deref()),
+        CodespaceCommand::Logs {
+            name,
+            repo,
+            json,
+            follow,
+            hostname,
+        } => logs(&name, repo.as_deref(), json, follow, hostname.as_deref()),
+        CodespaceCommand::Ssh {
+            name,
+            repo,
+            profile,
+            config,
+            hostname,
+        } => ssh(
+            &name,
+            repo.as_deref(),
+            profile.as_deref(),
+            config,
+            hostname.as_deref(),
+        ),
+        CodespaceCommand::Stop {
+            name,
+            repo,
+            all,
+            hostname,
+        } => stop(name.as_deref(), repo.as_deref(), all, hostname.as_deref()),
     }
 }
 
@@ -181,5 +207,161 @@ fn create(
     let result: serde_json::Value = response.json().context("failed to parse response")?;
     let name = result["name"].as_str().unwrap_or("—");
     println!("Codespace '{name}' created.");
+    Ok(())
+}
+
+fn logs(
+    name: &str,
+    _repo: Option<&str>,
+    json: Option<Vec<String>>,
+    follow: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let path = format!("/user/codespaces/{name}/logs");
+
+    let response = client
+        .get(&path)
+        .context("failed to fetch codespace logs")?;
+    let status = response.status();
+    if !status.is_success() {
+        anyhow::bail!("failed to fetch logs for '{name}': HTTP {status}");
+    }
+
+    let body = response.text().context("failed to read response")?;
+
+    if let Some(fields) = json {
+        let parsed: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
+        let fields_ref: Option<&[String]> = if fields.is_empty() {
+            None
+        } else {
+            Some(&fields)
+        };
+        print_json(&parsed, fields_ref);
+        return Ok(());
+    }
+
+    if follow {
+        println!("Logs for codespace '{name}':");
+    }
+    println!("{body}");
+
+    if follow {
+        tracing::warn!("log following is not yet implemented");
+    }
+
+    Ok(())
+}
+
+fn ssh(
+    name: &str,
+    _repo: Option<&str>,
+    _profile: Option<&str>,
+    config: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let path = format!("/user/codespaces/{name}");
+
+    let response = client
+        .get(&path)
+        .context("failed to fetch codespace details")?;
+    let status = response.status();
+    if !status.is_success() {
+        anyhow::bail!("failed to fetch codespace '{name}': HTTP {status}");
+    }
+
+    let cs: serde_json::Value = response.json().context("failed to parse response")?;
+    let state = cs["state"].as_str().unwrap_or("unknown");
+
+    if state != "Available" {
+        anyhow::bail!("codespace '{name}' is not available (state: {state})");
+    }
+
+    // Fetch SSH connection details
+    let ssh_path = format!("/user/codespaces/{name}");
+    let ssh_response = client
+        .get(&ssh_path)
+        .context("failed to fetch SSH details")?;
+    let ssh_details: serde_json::Value =
+        ssh_response.json().context("failed to parse SSH details")?;
+
+    if config {
+        let connection = ssh_details.get("connection").and_then(|c| c.as_object());
+        if let Some(conn) = connection {
+            println!("Host {name}");
+            if let Some(hostname) = conn.get("host").and_then(|v| v.as_str()) {
+                println!("  HostName {hostname}");
+            }
+            if let Some(port) = conn.get("port") {
+                println!("  Port {port}");
+            }
+            if let Some(user) = conn.get("user").and_then(|v| v.as_str()) {
+                println!("  User {user}");
+            }
+        } else {
+            println!("# No SSH connection details available for '{name}'");
+        }
+        return Ok(());
+    }
+
+    anyhow::bail!("SSH connection is not yet implemented; use --config to view connection details");
+}
+
+fn stop(
+    name: Option<&str>,
+    _repo: Option<&str>,
+    all: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    if all {
+        // List all codespaces and stop each one
+        let response = client
+            .get("/user/codespaces")
+            .context("failed to list codespaces")?;
+        let result: serde_json::Value = response.json().context("failed to parse response")?;
+        let spaces: Vec<serde_json::Value> = result["codespaces"]
+            .as_array()
+            .map_or_else(Vec::new, Clone::clone);
+
+        let mut stopped = 0u32;
+        for s in &spaces {
+            let cs_name = s["name"].as_str().unwrap_or("");
+            let cs_state = s["state"].as_str().unwrap_or("");
+            if cs_state == "Shutdown" || cs_state == "Deleted" {
+                continue;
+            }
+            let stop_path = format!("/user/codespaces/{cs_name}/stop");
+            let resp = client
+                .request("POST", &stop_path, &[], None)
+                .context("failed to stop codespace")?;
+            if resp.status().is_success() {
+                stopped += 1;
+            }
+        }
+        println!("Stopped {stopped} codespace(s).");
+        return Ok(());
+    }
+
+    let cs_name = name.ok_or_else(|| anyhow::anyhow!("codespace name is required"))?;
+    let path = format!("/user/codespaces/{cs_name}/stop");
+
+    let response = client
+        .request("POST", &path, &[], None)
+        .context("failed to stop codespace")?;
+
+    let status = response.status();
+    if !status.is_success() {
+        anyhow::bail!("failed to stop codespace '{cs_name}': HTTP {status}");
+    }
+
+    println!("Codespace '{cs_name}' stopped.");
     Ok(())
 }

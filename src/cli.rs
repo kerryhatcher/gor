@@ -1751,6 +1751,14 @@ pub enum ExtensionCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Remove an extension.
+    Remove {
+        /// Extension name to remove.
+        name: String,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor codespace`.
@@ -1792,6 +1800,54 @@ pub enum CodespaceCommand {
         /// Skip confirmation prompt.
         #[arg(long)]
         yes: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// View codespace logs.
+    Logs {
+        /// Codespace name.
+        name: String,
+        /// Repository to scope selection (OWNER/REPO format).
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// Follow log output until the codespace is ready.
+        #[arg(short = 'f', long)]
+        follow: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// SSH into a codespace.
+    Ssh {
+        /// Codespace name.
+        name: String,
+        /// Repository to scope selection (OWNER/REPO format).
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// SSH config profile.
+        #[arg(long)]
+        profile: Option<String>,
+        /// Print SSH connection config instead of connecting.
+        #[arg(long)]
+        config: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Stop a codespace.
+    Stop {
+        /// Codespace name to stop.
+        name: Option<String>,
+        /// Repository to scope selection (OWNER/REPO format).
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Stop all codespaces owned by the user.
+        #[arg(long, conflicts_with = "name")]
+        all: bool,
         /// GitHub hostname for GitHub Enterprise Server (default: github.com).
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,

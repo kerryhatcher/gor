@@ -18,6 +18,7 @@ pub fn run(cmd: ExtensionCommand) -> anyhow::Result<()> {
     match cmd {
         ExtensionCommand::List { json, hostname } => list(json, hostname.as_deref()),
         ExtensionCommand::Install { name, hostname } => install(&name, hostname.as_deref()),
+        ExtensionCommand::Remove { name, hostname } => remove(&name, hostname.as_deref()),
     }
 }
 
@@ -66,4 +67,25 @@ fn install(_name: &str, _hostname: Option<&str>) -> anyhow::Result<()> {
     anyhow::bail!(
         "extension installation is not yet implemented; use `gh extension install` instead"
     );
+}
+
+fn remove(name: &str, _hostname: Option<&str>) -> anyhow::Result<()> {
+    let ext_dir = dirs::home_dir()
+        .unwrap_or_default()
+        .join(".local")
+        .join("share")
+        .join("gor")
+        .join("extensions")
+        .join(name);
+
+    if !ext_dir.exists() {
+        println!("Extension '{name}' is not installed.");
+        return Ok(());
+    }
+
+    std::fs::remove_dir_all(&ext_dir)
+        .with_context(|| format!("failed to remove extension '{name}'"))?;
+
+    println!("Extension '{name}' removed.");
+    Ok(())
 }
