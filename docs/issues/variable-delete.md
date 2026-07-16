@@ -5,7 +5,7 @@ phase: 3
 endpoints:
   - DELETE /repos/{owner}/{repo}/actions/variables/{name}
   - DELETE /orgs/{org}/actions/variables/{name}
-status: todo
+status: done
 blockedBy: [variable-list]
 blocks: []
 

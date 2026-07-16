@@ -32,6 +32,12 @@ pub fn run(cmd: CodespaceCommand) -> anyhow::Result<()> {
             machine.as_deref(),
             hostname.as_deref(),
         ),
+        CodespaceCommand::Delete {
+            name,
+            repo,
+            yes,
+            hostname,
+        } => delete(&name, repo.as_deref(), yes, hostname.as_deref()),
     }
 }
 
@@ -89,6 +95,46 @@ fn list(
         println!("{name_truncated:<24}  {repo_truncated:<20}  {state:<15}  {branch}");
     }
 
+    Ok(())
+}
+
+fn delete(name: &str, repo: Option<&str>, yes: bool, hostname: Option<&str>) -> anyhow::Result<()> {
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    if !yes {
+        use std::io::Write;
+        let prompt = if let Some(r) = repo {
+            format!("Are you sure you want to delete codespace '{name}' in repo '{r}'?")
+        } else {
+            format!("Are you sure you want to delete codespace '{name}'?")
+        };
+        print!("{prompt} [y/N] ");
+        std::io::stdout().flush().ok();
+
+        let mut input = String::new();
+        std::io::stdin()
+            .read_line(&mut input)
+            .context("failed to read input")?;
+        let input = input.trim().to_lowercase();
+        if input != "y" && input != "yes" {
+            println!("Cancelled.");
+            return Ok(());
+        }
+    }
+
+    let path = format!("/user/codespaces/{name}");
+
+    let response = client
+        .request("DELETE", &path, &[], None)
+        .context("failed to delete codespace")?;
+
+    let status = response.status();
+    if !status.is_success() {
+        anyhow::bail!("failed to delete codespace '{name}': HTTP {status}");
+    }
+
+    println!("Codespace '{name}' deleted.");
     Ok(())
 }
 

@@ -4,7 +4,7 @@ priority: P2
 phase: 4
 endpoints:
   - DELETE /user/codespaces/{codespace_name}
-status: todo
+status: done
 blockedBy: [codespace-list]
 blocks: []
 ---

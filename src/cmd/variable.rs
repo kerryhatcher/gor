@@ -35,6 +35,11 @@ pub fn run(cmd: VariableCommand) -> anyhow::Result<()> {
             org.as_deref(),
             hostname.as_deref(),
         ),
+        VariableCommand::Delete {
+            name,
+            org,
+            hostname,
+        } => delete(&name, org.as_deref(), hostname.as_deref()),
     }
 }
 
@@ -95,6 +100,40 @@ fn list(
         println!("{name_truncated:<30}  {value_truncated}");
     }
 
+    Ok(())
+}
+
+fn delete(name: &str, org: Option<&str>, hostname: Option<&str>) -> anyhow::Result<()> {
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let path = if let Some(o) = org {
+        format!("/orgs/{o}/actions/variables/{name}")
+    } else {
+        let spec = detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository; specify --org or run from a repo directory"
+            )
+        })?;
+        format!(
+            "/repos/{}/{}/actions/variables/{name}",
+            spec.owner, spec.repo
+        )
+    };
+
+    let response = client
+        .request("DELETE", &path, &[], None)
+        .context("failed to delete variable")?;
+
+    let status = response.status();
+    if status == 404 {
+        anyhow::bail!("variable '{name}' not found");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to delete variable '{name}': HTTP {status}");
+    }
+
+    println!("Variable '{name}' deleted.");
     Ok(())
 }
 

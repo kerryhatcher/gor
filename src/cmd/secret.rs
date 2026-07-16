@@ -1,6 +1,6 @@
 //! Implementation of the `gor secret` subcommand.
 //!
-//! Provides secret listing and creation for GitHub Actions.
+//! Provides secret listing, creation, and deletion for GitHub Actions.
 
 #![allow(clippy::print_stdout)]
 
@@ -35,6 +35,11 @@ pub fn run(cmd: SecretCommand) -> anyhow::Result<()> {
             org.as_deref(),
             hostname.as_deref(),
         ),
+        SecretCommand::Delete {
+            name,
+            org,
+            hostname,
+        } => delete(&name, org.as_deref(), hostname.as_deref()),
     }
 }
 
@@ -146,5 +151,36 @@ fn set(
     }
 
     println!("Secret '{name}' set.");
+    Ok(())
+}
+
+fn delete(name: &str, org: Option<&str>, hostname: Option<&str>) -> anyhow::Result<()> {
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let path = if let Some(o) = org {
+        format!("/orgs/{o}/actions/secrets/{name}")
+    } else {
+        let spec = detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository; specify --org or run from a repo directory"
+            )
+        })?;
+        format!("/repos/{}/{}/actions/secrets/{name}", spec.owner, spec.repo)
+    };
+
+    let response = client
+        .request("DELETE", &path, &[], None)
+        .context("failed to delete secret")?;
+
+    let status = response.status();
+    if status == 404 {
+        anyhow::bail!("secret '{name}' not found");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to delete secret '{name}': HTTP {status}");
+    }
+
+    println!("Secret '{name}' deleted.");
     Ok(())
 }

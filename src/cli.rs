@@ -1553,6 +1553,17 @@ pub enum SecretCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Delete a secret.
+    Delete {
+        /// Secret name to delete.
+        name: String,
+        /// Delete at the organization level.
+        #[arg(long)]
+        org: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor variable`.
@@ -1581,6 +1592,17 @@ pub enum VariableCommand {
         #[arg(short = 'f', long)]
         file: Option<String>,
         /// Organization to set the variable for.
+        #[arg(long)]
+        org: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Delete a variable.
+    Delete {
+        /// Variable name to delete.
+        name: String,
+        /// Delete at the organization level.
         #[arg(long)]
         org: Option<String>,
         /// GitHub hostname for GitHub Enterprise Server (default: github.com).
@@ -1649,6 +1671,26 @@ pub enum CacheCommand {
         /// Output as JSON. Optionally specify comma-separated field names.
         #[arg(long, num_args = 0.., value_delimiter = ',')]
         json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Delete caches.
+    Delete {
+        /// Cache key to delete (exact match).
+        key: Option<String>,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Delete all caches in the repository.
+        #[arg(long, conflicts_with = "key", conflicts_with = "key_prefix")]
+        all: bool,
+        /// Delete caches whose keys start with this prefix.
+        #[arg(long, conflicts_with = "key", conflicts_with = "all")]
+        key_prefix: Option<String>,
+        /// Scope deletion to a specific branch/tag ref.
+        #[arg(long, name = "ref")]
+        ref_: Option<String>,
         /// GitHub hostname for GitHub Enterprise Server (default: github.com).
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
@@ -1736,6 +1778,20 @@ pub enum CodespaceCommand {
         /// Machine type.
         #[arg(long)]
         machine: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Delete a codespace.
+    Delete {
+        /// Codespace name to delete.
+        name: String,
+        /// Repository to scope selection (OWNER/REPO format).
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Skip confirmation prompt.
+        #[arg(long)]
+        yes: bool,
         /// GitHub hostname for GitHub Enterprise Server (default: github.com).
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
