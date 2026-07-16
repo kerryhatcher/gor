@@ -31,4 +31,26 @@ pub enum Command {
         /// Repository to view (OWNER/REPO format).
         owner_repo: String,
     },
+    /// Manage configuration values.
+    #[command(subcommand)]
+    Config(ConfigCommand),
+}
+
+/// Subcommands for `gor config`.
+#[derive(Subcommand, Debug)]
+pub enum ConfigCommand {
+    /// Get a config value.
+    Get {
+        /// Config key to read.
+        key: String,
+    },
+    /// Set a config value.
+    Set {
+        /// Config key to set.
+        key: String,
+        /// Value to set.
+        value: String,
+    },
+    /// List all config values.
+    List,
 }

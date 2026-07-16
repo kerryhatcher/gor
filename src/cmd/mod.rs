@@ -3,6 +3,7 @@
 //! Each subcommand lives in its own module. The [`dispatch`] function
 //! routes parsed CLI arguments to the appropriate command handler.
 
+pub mod config;
 pub mod util;
 
 use crate::cli::{Args, Command};
@@ -21,5 +22,6 @@ pub fn dispatch(args: Args) -> anyhow::Result<()> {
             println!("This command is not yet implemented.");
             Ok(())
         }
+        Command::Config(cmd) => config::run(cmd, args.hostname.as_deref()),
     }
 }
