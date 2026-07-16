@@ -840,4 +840,56 @@ pub enum ReleaseCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Create a new release.
+    Create {
+        /// Tag name for the release (must already exist).
+        tag: String,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Release title (defaults to tag name).
+        #[arg(long)]
+        title: Option<String>,
+        /// Release body (markdown).
+        #[arg(long)]
+        notes: Option<String>,
+        /// Read release notes from a file (use "-" for stdin).
+        #[arg(long)]
+        notes_file: Option<String>,
+        /// Create as a draft release.
+        #[arg(long)]
+        draft: bool,
+        /// Mark as a prerelease.
+        #[arg(long)]
+        prerelease: bool,
+        /// Target commitish (branch or commit SHA).
+        #[arg(long)]
+        target: Option<String>,
+        /// Discussion category for the release.
+        #[arg(long)]
+        discussion_category: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Download release assets.
+    Download {
+        /// Tag name or release ID.
+        release: String,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Filter assets by glob pattern (repeatable).
+        #[arg(long = "pattern")]
+        patterns: Vec<String>,
+        /// Output directory (default: current directory).
+        #[arg(short = 'D', long, default_value = ".")]
+        dir: String,
+        /// Skip assets whose file already exists.
+        #[arg(long)]
+        skip_existing: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }

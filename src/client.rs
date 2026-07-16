@@ -112,6 +112,25 @@ impl Client {
         req.send().map_err(GorError::Http)
     }
 
+    /// Make a `GET` request to an absolute URL (not API-path-based).
+    ///
+    /// Used for downloading release assets from the GitHub CDN.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the HTTP request fails.
+    pub fn get_absolute(&self, url: &str) -> Result<reqwest::blocking::Response, GorError> {
+        let mut req = self
+            .http
+            .get(url)
+            .header("Accept", "application/octet-stream");
+        if let Some(token) = &self.token {
+            req = req.header("Authorization", format!("Bearer {token}"));
+        }
+        tracing::debug!("GET {url}");
+        req.send().map_err(GorError::Http)
+    }
+
     /// Make a request with an arbitrary HTTP method, headers, and optional body.
     ///
     /// The path should start with `/`, e.g. `/repos/owner/repo`.

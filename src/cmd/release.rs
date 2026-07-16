@@ -92,6 +92,44 @@ pub fn run(cmd: ReleaseCommand) -> anyhow::Result<()> {
             mime_type.as_deref(),
             hostname.as_deref(),
         ),
+        ReleaseCommand::Create {
+            tag,
+            repo,
+            title,
+            notes,
+            notes_file,
+            draft,
+            prerelease,
+            target,
+            discussion_category,
+            hostname,
+        } => create_release(
+            &tag,
+            repo.as_deref(),
+            title.as_deref(),
+            notes.as_deref(),
+            notes_file.as_deref(),
+            draft,
+            prerelease,
+            target.as_deref(),
+            discussion_category.as_deref(),
+            hostname.as_deref(),
+        ),
+        ReleaseCommand::Download {
+            release,
+            repo,
+            patterns,
+            dir,
+            skip_existing,
+            hostname,
+        } => download(
+            &release,
+            repo.as_deref(),
+            &patterns,
+            &dir,
+            skip_existing,
+            hostname.as_deref(),
+        ),
     }
 }
 
@@ -659,6 +697,268 @@ fn detect_mime_type(filename: &str) -> String {
     }
 }
 
+/// Execute `gor release create`.
+///
+/// Creates a new GitHub release for an existing tag. Supports draft,
+/// prerelease, notes from file/stdin, and discussion category.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the tag does not
+/// exist, or the API request fails.
+#[allow(clippy::too_many_arguments)]
+fn create_release(
+    tag: &str,
+    repo: Option<&str>,
+    title: Option<&str>,
+    notes: Option<&str>,
+    notes_file: Option<&str>,
+    draft: bool,
+    prerelease: bool,
+    target: Option<&str>,
+    discussion_category: Option<&str>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Read notes from file if specified
+    let body = if let Some(file) = notes_file {
+        let content = if file == "-" {
+            use std::io::Read;
+            let mut buf = String::new();
+            std::io::stdin()
+                .read_to_string(&mut buf)
+                .context("failed to read notes from stdin")?;
+            buf
+        } else {
+            std::fs::read_to_string(file)
+                .with_context(|| format!("failed to read notes file: {file}"))?
+        };
+        Some(content)
+    } else {
+        notes.map(String::from)
+    };
+
+    // Build the request body
+    let mut body_map = serde_json::Map::new();
+    body_map.insert(
+        "tag_name".to_string(),
+        serde_json::Value::String(tag.to_string()),
+    );
+    body_map.insert(
+        "name".to_string(),
+        serde_json::Value::String(title.unwrap_or(tag).to_string()),
+    );
+    if let Some(ref b) = body {
+        body_map.insert("body".to_string(), serde_json::Value::String(b.clone()));
+    }
+    if draft {
+        body_map.insert("draft".to_string(), serde_json::Value::Bool(true));
+    }
+    if prerelease {
+        body_map.insert("prerelease".to_string(), serde_json::Value::Bool(true));
+    }
+    if let Some(t) = target {
+        body_map.insert(
+            "target_commitish".to_string(),
+            serde_json::Value::String(t.to_string()),
+        );
+    }
+    if let Some(c) = discussion_category {
+        body_map.insert(
+            "discussion_category_name".to_string(),
+            serde_json::Value::String(c.to_string()),
+        );
+    }
+
+    let path = format!("/repos/{}/{}/releases", spec.owner, spec.repo);
+    let body_value = serde_json::Value::Object(body_map);
+    let response = client
+        .post(&path, &body_value)
+        .context("failed to create release")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("repository '{spec}' not found");
+    }
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("creation failed");
+        anyhow::bail!("failed to create release: {msg}");
+    }
+
+    let release_data: serde_json::Value = response
+        .json()
+        .context("failed to parse release response")?;
+    let html_url = release_data["html_url"].as_str().unwrap_or("(unknown URL)");
+    println!("{html_url}");
+    Ok(())
+}
+
+/// Execute `gor release download`.
+///
+/// Downloads assets from a release. Supports glob pattern filtering,
+/// output directory selection, and skipping existing files.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the release does not
+/// exist, no assets match the pattern, or a download fails.
+fn download(
+    release: &str,
+    repo: Option<&str>,
+    patterns: &[String],
+    dir: &str,
+    skip_existing: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Resolve the release
+    let (release_id, _tag_name) = resolve_release(&client, &spec.owner, &spec.repo, release)?;
+
+    // Fetch the release to get assets
+    let get_path = format!("/repos/{}/{}/releases/{release_id}", spec.owner, spec.repo);
+    let resp = client.get(&get_path).context("failed to fetch release")?;
+    let release_data: serde_json::Value =
+        resp.json().context("failed to parse release response")?;
+
+    let assets = release_data["assets"]
+        .as_array()
+        .map_or(&[] as &[serde_json::Value], |a| a);
+
+    // Filter assets by patterns
+    let filtered: Vec<&serde_json::Value> = if patterns.is_empty() {
+        assets.iter().collect()
+    } else {
+        assets
+            .iter()
+            .filter(|asset| {
+                let name = asset["name"].as_str().unwrap_or("");
+                patterns.iter().any(|p| glob_match(p, name))
+            })
+            .collect()
+    };
+
+    if filtered.is_empty() {
+        if patterns.is_empty() {
+            anyhow::bail!("release has no assets to download");
+        }
+        anyhow::bail!("no assets match the given pattern(s)");
+    }
+
+    // Ensure output directory exists
+    std::fs::create_dir_all(dir)
+        .with_context(|| format!("failed to create output directory: {dir}"))?;
+
+    for asset in &filtered {
+        let asset_name = asset["name"].as_str().unwrap_or("unknown");
+        let asset_url = asset["browser_download_url"]
+            .as_str()
+            .context("asset missing download URL")?;
+        let asset_size = asset["size"].as_u64().unwrap_or(0);
+
+        let output_path = std::path::Path::new(dir).join(asset_name);
+
+        // Skip if file exists
+        if skip_existing && output_path.exists() {
+            println!("Skipping {asset_name} (already exists)");
+            continue;
+        }
+
+        // Download the asset
+        print!(
+            "Downloading {asset_name} ({}) ... ",
+            format_size(asset_size)
+        );
+        std::io::stdout().flush().ok();
+
+        let response = client
+            .get_absolute(asset_url)
+            .with_context(|| format!("failed to download {asset_name}"))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            anyhow::bail!("failed to download '{asset_name}': HTTP {status}");
+        }
+
+        let data = response
+            .bytes()
+            .with_context(|| format!("failed to read response body for {asset_name}"))?;
+
+        std::fs::write(&output_path, &data)
+            .with_context(|| format!("failed to write {}", output_path.display()))?;
+
+        println!("done");
+        println!("{}", output_path.display());
+    }
+
+    Ok(())
+}
+
+/// Simple glob pattern matching for asset filtering.
+///
+/// Supports `*` (any characters) and `?` (single character) wildcards.
+fn glob_match(pattern: &str, name: &str) -> bool {
+    let pattern = pattern.to_lowercase();
+    let name = name.to_lowercase();
+
+    // If no wildcards, do exact match
+    if !pattern.contains('*') && !pattern.contains('?') {
+        return pattern == name;
+    }
+
+    // Simple recursive glob matching
+    glob_match_impl(&pattern, &name)
+}
+
+fn glob_match_impl(pattern: &str, name: &str) -> bool {
+    let mut pi = pattern.chars();
+    let mut ni = name.chars();
+
+    loop {
+        match (pi.next(), ni.next()) {
+            (None | Some('*'), None) => return true,
+            (Some('*'), Some(_)) => {
+                let rest_pattern: String = pi.collect();
+                if rest_pattern.is_empty() {
+                    return true;
+                }
+                let remaining: String = ni.collect();
+                for i in 0..=remaining.len() {
+                    if glob_match_impl(&rest_pattern, &remaining[i..]) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            (Some('?'), Some(_)) => {}
+            (Some(pc), Some(nc)) if pc == nc => {}
+            _ => return false,
+        }
+    }
+}
+
 /// Print a formatted single-release view.
 ///
 /// Displays tag, name, status, published date, author, URL, body, and assets.
@@ -919,5 +1219,31 @@ mod tests {
     fn detect_mime_type_unknown() {
         assert_eq!(detect_mime_type("app.xyz"), "application/octet-stream");
         assert_eq!(detect_mime_type("app"), "application/octet-stream");
+    }
+
+    #[test]
+    fn glob_match_exact() {
+        assert!(glob_match("app.zip", "app.zip"));
+        assert!(!glob_match("app.zip", "app.tar.gz"));
+    }
+
+    #[test]
+    fn glob_match_star() {
+        assert!(glob_match("*.zip", "app.zip"));
+        assert!(glob_match("*.tar.gz", "app.tar.gz"));
+        assert!(!glob_match("*.zip", "app.tar.gz"));
+        assert!(glob_match("app-*", "app-linux-amd64"));
+    }
+
+    #[test]
+    fn glob_match_question() {
+        assert!(glob_match("app.???", "app.zip"));
+        assert!(!glob_match("app.???", "app.tar.gz"));
+    }
+
+    #[test]
+    fn glob_match_case_insensitive() {
+        assert!(glob_match("*.ZIP", "app.zip"));
+        assert!(glob_match("App-*", "app-linux"));
     }
 }
