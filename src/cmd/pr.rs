@@ -3,13 +3,14 @@
 //! Provides pull request listing, viewing, and management commands.
 //! Currently supports `gor pr list` for listing pull requests.
 
-#![allow(clippy::print_stdout)]
+#![allow(clippy::print_stdout, clippy::print_stderr)]
 
 use crate::cli::PrCommand;
 use crate::client::Client;
 use crate::output::{format_date, print_json};
 use crate::repository::{detect_remote, parse_repo_spec};
 use anyhow::Context;
+use gix::bstr::ByteSlice;
 use std::collections::BTreeMap;
 
 /// Run the `gor pr` subcommand.
@@ -57,6 +58,33 @@ pub fn run(cmd: PrCommand) -> anyhow::Result<()> {
             web,
             comments,
             json,
+            hostname.as_deref(),
+        ),
+        PrCommand::Create {
+            repo,
+            title,
+            body,
+            base,
+            head,
+            draft,
+            labels,
+            assignee,
+            milestone,
+            project,
+            web,
+            hostname,
+        } => create(
+            repo.as_deref(),
+            title.as_deref(),
+            body.as_deref(),
+            base.as_deref(),
+            head.as_deref(),
+            draft,
+            &labels,
+            &assignee,
+            milestone.as_deref(),
+            project,
+            web,
             hostname.as_deref(),
         ),
     }
@@ -306,6 +334,167 @@ fn view(
 
     // Print formatted view
     print_pr_view(&pr, &reviews, ci_status.as_ref(), &comments_data);
+    Ok(())
+}
+
+/// Execute `gor pr create`.
+///
+/// Creates a pull request from the current branch to the base branch.
+/// Auto-detects the head branch from the current git branch and the base
+/// branch from the repository's default branch. Supports draft PRs, labels,
+/// assignees, milestones, and project board assignment.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the PR creation fails,
+/// or required fields are missing.
+#[allow(clippy::too_many_arguments)]
+fn create(
+    repo: Option<&str>,
+    title: Option<&str>,
+    body: Option<&str>,
+    base: Option<&str>,
+    head: Option<&str>,
+    draft: bool,
+    labels: &[String],
+    assignees: &[String],
+    _milestone: Option<&str>,
+    _project: Option<u32>,
+    web: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    // Resolve the repo spec
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Auto-detect head branch from current git branch if not specified
+    let head_branch = if let Some(b) = head {
+        b.to_string()
+    } else {
+        let repo =
+            gix::discover(std::env::current_dir().context("failed to get current directory")?)
+                .context("failed to discover git repository")?;
+        let head_ref = repo.head().context("failed to get HEAD")?;
+        head_ref
+            .name()
+            .shorten()
+            .to_str()
+            .context("branch name is not valid UTF-8")?
+            .to_string()
+    };
+
+    // Auto-detect base branch from repo's default branch if not specified
+    let base_branch = if let Some(b) = base {
+        b.to_string()
+    } else {
+        let path = format!("/repos/{}/{}", spec.owner, spec.repo);
+        let response = client
+            .get(&path)
+            .context("failed to fetch repository data")?;
+        let status = response.status();
+        if !status.is_success() {
+            anyhow::bail!("failed to fetch repository '{spec}': HTTP {status}");
+        }
+        let repo_data: serde_json::Value = response
+            .json()
+            .context("failed to parse repository response")?;
+        repo_data["default_branch"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("could not determine default branch"))?
+            .to_string()
+    };
+
+    // Build the request body
+    let mut body_map = serde_json::Map::new();
+    body_map.insert(
+        "title".to_string(),
+        serde_json::Value::String(
+            title
+                .ok_or_else(|| anyhow::anyhow!("PR title is required; use --title"))?
+                .to_string(),
+        ),
+    );
+    body_map.insert("head".to_string(), serde_json::Value::String(head_branch));
+    body_map.insert("base".to_string(), serde_json::Value::String(base_branch));
+    if let Some(b) = body {
+        body_map.insert("body".to_string(), serde_json::Value::String(b.to_string()));
+    }
+    if draft {
+        body_map.insert("draft".to_string(), serde_json::Value::Bool(true));
+    }
+
+    let body_value = serde_json::Value::Object(body_map);
+
+    // Create the PR
+    let path = format!("/repos/{}/{}/pulls", spec.owner, spec.repo);
+    let response = client
+        .post(&path, &body_value)
+        .context("failed to create pull request")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("repository '{spec}' not found");
+    }
+    if status == reqwest::StatusCode::UNPROCESSABLE_ENTITY {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("validation failed");
+        anyhow::bail!("failed to create pull request: {msg}");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to create pull request: HTTP {status}");
+    }
+
+    let pr: serde_json::Value = response
+        .json()
+        .context("failed to parse pull request response")?;
+
+    let pr_number = pr["number"].as_u64().unwrap_or(0);
+    let pr_url = pr["html_url"].as_str().unwrap_or("");
+
+    // Handle --web flag: open in browser
+    if web && !pr_url.is_empty() {
+        open_in_browser(pr_url);
+    }
+
+    // Print success message
+    println!(
+        "https://github.com/{}/{}/pull/{pr_number}",
+        spec.owner, spec.repo
+    );
+
+    // Add labels if specified
+    if !labels.is_empty() {
+        let labels_path = format!(
+            "/repos/{}/{}/issues/{pr_number}/labels",
+            spec.owner, spec.repo
+        );
+        let labels_body = serde_json::json!({"labels": labels});
+        if let Err(e) = client.post(&labels_path, &labels_body) {
+            eprintln!("Warning: failed to add labels: {e}");
+        }
+    }
+
+    // Add assignees if specified
+    if !assignees.is_empty() {
+        let assignees_path = format!(
+            "/repos/{}/{}/issues/{pr_number}/assignees",
+            spec.owner, spec.repo
+        );
+        let assignees_body = serde_json::json!({"assignees": assignees});
+        if let Err(e) = client.post(&assignees_path, &assignees_body) {
+            eprintln!("Warning: failed to add assignees: {e}");
+        }
+    }
+
     Ok(())
 }
 

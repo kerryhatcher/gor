@@ -247,6 +247,45 @@ pub enum PrCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Create a pull request.
+    Create {
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// PR title.
+        #[arg(long)]
+        title: Option<String>,
+        /// PR body (markdown).
+        #[arg(long)]
+        body: Option<String>,
+        /// Base branch to merge into. Auto-detected from the repo's default branch.
+        #[arg(long)]
+        base: Option<String>,
+        /// Head branch. Auto-detected from the current branch.
+        #[arg(long)]
+        head: Option<String>,
+        /// Create as a draft PR.
+        #[arg(long)]
+        draft: bool,
+        /// Add labels (repeatable).
+        #[arg(long = "label")]
+        labels: Vec<String>,
+        /// Assign people by login (repeatable).
+        #[arg(long)]
+        assignee: Vec<String>,
+        /// Milestone ID or title.
+        #[arg(long)]
+        milestone: Option<String>,
+        /// Add to project board by number.
+        #[arg(long)]
+        project: Option<u32>,
+        /// Open the PR in the default browser after creation.
+        #[arg(short = 'w', long)]
+        web: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor issue`.
