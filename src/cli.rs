@@ -127,6 +127,26 @@ pub enum PrCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// View details of a pull request.
+    View {
+        /// Pull request number.
+        number: u64,
+        /// Repository to view PR from (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Open the PR in the default browser.
+        #[arg(short = 'w', long)]
+        web: bool,
+        /// Include the PR's comment thread.
+        #[arg(long)]
+        comments: bool,
+        /// Output as JSON. Optionally specify comma-separated field names.
+        #[arg(long, num_args = 0.., value_delimiter = ',')]
+        json: Option<Vec<String>>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor config`.
