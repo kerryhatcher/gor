@@ -4,7 +4,7 @@ priority: P1
 phase: 1
 endpoints:
   - DELETE /repos/{owner}/{repo}
-status: todo
+status: done
 blockedBy: [repo-view]
 blocks: []
 ---

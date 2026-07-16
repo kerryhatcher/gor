@@ -5,7 +5,7 @@ phase: 1
 endpoints:
   - POST /user/repos
   - POST /orgs/{org}/repos
-status: todo
+status: done
 blockedBy: [auth-login]
 blocks: []
 ---
