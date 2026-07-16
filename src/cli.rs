@@ -655,6 +655,38 @@ pub enum IssueCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Edit an issue.
+    Edit {
+        /// Issue number.
+        number: u64,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// New issue title.
+        #[arg(long)]
+        title: Option<String>,
+        /// New issue body (markdown).
+        #[arg(long)]
+        body: Option<String>,
+        /// Add labels (repeatable).
+        #[arg(long = "add-label")]
+        add_label: Vec<String>,
+        /// Remove labels (repeatable).
+        #[arg(long = "remove-label")]
+        remove_label: Vec<String>,
+        /// Add assignees by login (repeatable).
+        #[arg(long = "add-assignee")]
+        add_assignee: Vec<String>,
+        /// Remove assignees by login (repeatable).
+        #[arg(long = "remove-assignee")]
+        remove_assignee: Vec<String>,
+        /// Milestone ID or title.
+        #[arg(long)]
+        milestone: Option<String>,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor config`.
@@ -753,6 +785,38 @@ pub enum ReleaseCommand {
         /// Keep the associated git tag (do not delete it).
         #[arg(long)]
         skip_tag: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
+    /// Edit a release.
+    Edit {
+        /// Tag name or release ID.
+        release: String,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// New release title.
+        #[arg(long)]
+        title: Option<String>,
+        /// New release body (markdown).
+        #[arg(long)]
+        notes: Option<String>,
+        /// Read release body from a file (use "-" for stdin).
+        #[arg(long)]
+        notes_file: Option<String>,
+        /// Set draft status (true or false).
+        #[arg(long)]
+        draft: Option<bool>,
+        /// Set prerelease status (true or false).
+        #[arg(long)]
+        prerelease: Option<bool>,
+        /// Change the tag the release points to.
+        #[arg(long)]
+        tag: Option<String>,
+        /// Change the target commitish (branch or commit SHA).
+        #[arg(long)]
+        target: Option<String>,
         /// GitHub hostname for GitHub Enterprise Server (default: github.com).
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,

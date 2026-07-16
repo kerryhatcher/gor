@@ -53,6 +53,29 @@ pub fn run(cmd: ReleaseCommand) -> anyhow::Result<()> {
             skip_tag,
             hostname.as_deref(),
         ),
+        ReleaseCommand::Edit {
+            release,
+            repo,
+            title,
+            notes,
+            notes_file,
+            draft,
+            prerelease,
+            tag,
+            target,
+            hostname,
+        } => edit(
+            &release,
+            repo.as_deref(),
+            title.as_deref(),
+            notes.as_deref(),
+            notes_file.as_deref(),
+            draft,
+            prerelease,
+            tag.as_deref(),
+            target.as_deref(),
+            hostname.as_deref(),
+        ),
     }
 }
 
@@ -369,6 +392,113 @@ fn resolve_release(
     let data: serde_json::Value = resp.json().context("failed to parse release response")?;
     let tag = data["tag_name"].as_str().unwrap_or(release).to_string();
     Ok((id, tag))
+}
+
+/// Execute `gor release edit`.
+///
+/// Edits an existing release's metadata. Supports updating title, body,
+/// draft/prerelease status, tag name, and target commitish.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the release does not
+/// exist, or the API request fails.
+#[allow(clippy::too_many_arguments)]
+fn edit(
+    release: &str,
+    repo: Option<&str>,
+    title: Option<&str>,
+    notes: Option<&str>,
+    notes_file: Option<&str>,
+    draft: Option<bool>,
+    prerelease: Option<bool>,
+    tag: Option<&str>,
+    target: Option<&str>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Resolve the release to get its ID
+    let (release_id, _tag_name) = resolve_release(&client, &spec.owner, &spec.repo, release)?;
+
+    // Read notes from file if specified
+    let body = if let Some(file) = notes_file {
+        let content = if file == "-" {
+            use std::io::Read;
+            let mut buf = String::new();
+            std::io::stdin()
+                .read_to_string(&mut buf)
+                .context("failed to read notes from stdin")?;
+            buf
+        } else {
+            std::fs::read_to_string(file)
+                .with_context(|| format!("failed to read notes file: {file}"))?
+        };
+        Some(content)
+    } else {
+        notes.map(String::from)
+    };
+
+    // Build the PATCH body
+    let mut patch = serde_json::Map::new();
+    if let Some(t) = title {
+        patch.insert("name".to_string(), serde_json::Value::String(t.to_string()));
+    }
+    if let Some(ref b) = body {
+        patch.insert("body".to_string(), serde_json::Value::String(b.clone()));
+    }
+    if let Some(d) = draft {
+        patch.insert("draft".to_string(), serde_json::Value::Bool(d));
+    }
+    if let Some(p) = prerelease {
+        patch.insert("prerelease".to_string(), serde_json::Value::Bool(p));
+    }
+    if let Some(t) = tag {
+        patch.insert(
+            "tag_name".to_string(),
+            serde_json::Value::String(t.to_string()),
+        );
+    }
+    if let Some(t) = target {
+        patch.insert(
+            "target_commitish".to_string(),
+            serde_json::Value::String(t.to_string()),
+        );
+    }
+
+    if patch.is_empty() {
+        anyhow::bail!(
+            "no changes specified; use --title, --notes, --draft, --prerelease, --tag, or --target"
+        );
+    }
+
+    let api_path = format!("/repos/{}/{}/releases/{release_id}", spec.owner, spec.repo);
+    let response = client
+        .request("PATCH", &api_path, &[], Some(serde_json::to_vec(&patch)?))
+        .context("failed to edit release")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("release '{release}' not found in '{spec}'");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to edit release '{release}': HTTP {status}");
+    }
+
+    let updated: serde_json::Value = response.json().context("failed to parse response")?;
+    let html_url = updated["html_url"].as_str().unwrap_or("(unknown URL)");
+    println!("✓ Release updated: {html_url}");
+    Ok(())
 }
 
 /// Print a formatted single-release view.

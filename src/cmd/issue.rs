@@ -118,6 +118,29 @@ pub fn run(cmd: IssueCommand) -> anyhow::Result<()> {
             web,
             hostname.as_deref(),
         ),
+        IssueCommand::Edit {
+            number,
+            repo,
+            title,
+            body,
+            add_label,
+            remove_label,
+            add_assignee,
+            remove_assignee,
+            milestone,
+            hostname,
+        } => edit(
+            number,
+            repo.as_deref(),
+            title.as_deref(),
+            body.as_deref(),
+            &add_label,
+            &remove_label,
+            &add_assignee,
+            &remove_assignee,
+            milestone.as_deref(),
+            hostname.as_deref(),
+        ),
     }
 }
 
@@ -702,6 +725,162 @@ fn issue_create(
         open_in_browser(issue_url);
     }
 
+    println!(
+        "https://github.com/{}/{}/issues/{issue_number}",
+        spec.owner, spec.repo
+    );
+    Ok(())
+}
+
+/// Execute `gor issue edit`.
+///
+/// Edits an existing issue's title, body, labels, assignees, or milestone.
+/// Only fields that are provided will be updated.
+///
+/// # Errors
+///
+/// Returns an error if the issue does not exist, the API request fails,
+/// or the user does not have permission to edit the issue.
+#[allow(clippy::too_many_arguments)]
+fn edit(
+    number: u64,
+    repo: Option<&str>,
+    title: Option<&str>,
+    body: Option<&str>,
+    add_label: &[String],
+    remove_label: &[String],
+    add_assignee: &[String],
+    remove_assignee: &[String],
+    _milestone: Option<&str>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Build the request body with only the fields that were provided
+    let mut body_map = serde_json::Map::new();
+
+    if let Some(t) = title {
+        body_map.insert(
+            "title".to_string(),
+            serde_json::Value::String(t.to_string()),
+        );
+    }
+    if let Some(b) = body {
+        body_map.insert("body".to_string(), serde_json::Value::String(b.to_string()));
+    }
+
+    // Build the final labels list: current labels + add - remove
+    if !add_label.is_empty() || !remove_label.is_empty() {
+        // Fetch current labels first
+        let get_path = format!("/repos/{}/{}/issues/{number}", spec.owner, spec.repo);
+        let current: serde_json::Value = client
+            .get(&get_path)
+            .context("failed to fetch current issue labels")?
+            .json()
+            .context("failed to parse issue response")?;
+
+        let current_labels: Vec<String> = current["labels"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|l| l["name"].as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let mut new_labels = current_labels;
+        // Add new labels
+        for label in add_label {
+            if !new_labels.contains(label) {
+                new_labels.push(label.clone());
+            }
+        }
+        // Remove labels
+        new_labels.retain(|l| !remove_label.contains(l));
+
+        body_map.insert(
+            "labels".to_string(),
+            serde_json::Value::Array(
+                new_labels
+                    .iter()
+                    .map(|l| serde_json::Value::String(l.clone()))
+                    .collect(),
+            ),
+        );
+    }
+
+    // Handle assignees similarly
+    if !add_assignee.is_empty() || !remove_assignee.is_empty() {
+        // Fetch current assignees if we need to modify
+        if !add_assignee.is_empty() || !remove_assignee.is_empty() {
+            let get_path = format!("/repos/{}/{}/issues/{number}", spec.owner, spec.repo);
+            let current: serde_json::Value = client
+                .get(&get_path)
+                .context("failed to fetch current assignees")?
+                .json()
+                .context("failed to parse issue response")?;
+
+            let current_assignees: Vec<String> = current["assignees"]
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|l| l["login"].as_str().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            let mut new_assignees = current_assignees;
+            for a in add_assignee {
+                if !new_assignees.contains(a) {
+                    new_assignees.push(a.clone());
+                }
+            }
+            new_assignees.retain(|a| !remove_assignee.contains(a));
+
+            body_map.insert(
+                "assignees".to_string(),
+                serde_json::Value::Array(
+                    new_assignees
+                        .iter()
+                        .map(|a| serde_json::Value::String(a.clone()))
+                        .collect(),
+                ),
+            );
+        }
+    }
+
+    let body_value = serde_json::Value::Object(body_map);
+
+    let path = format!("/repos/{}/{}/issues/{number}", spec.owner, spec.repo);
+    let response = client
+        .request("PATCH", &path, &[], Some(serde_json::to_vec(&body_value)?))
+        .context("failed to update issue")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("issue #{number} not found in '{spec}'");
+    }
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("update failed");
+        anyhow::bail!("failed to update issue #{number}: {msg}");
+    }
+
+    let updated: serde_json::Value = response
+        .json()
+        .context("failed to parse updated issue response")?;
+
+    let issue_number = updated["number"].as_u64().unwrap_or(number);
     println!(
         "https://github.com/{}/{}/issues/{issue_number}",
         spec.owner, spec.repo
