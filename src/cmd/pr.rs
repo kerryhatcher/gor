@@ -225,6 +225,11 @@ pub fn run(cmd: PrCommand) -> anyhow::Result<()> {
             json,
             hostname,
         } => checks(number, repo.as_deref(), watch, json, hostname.as_deref()),
+        PrCommand::Ready {
+            number,
+            repo,
+            hostname,
+        } => ready(number, repo.as_deref(), hostname.as_deref()),
     }
 }
 
@@ -1825,6 +1830,58 @@ fn checks(
 
         std::thread::sleep(std::time::Duration::from_secs(5));
     }
+}
+
+/// Execute `gor pr ready`.
+///
+/// Marks a draft pull request as ready for review.
+///
+/// # Errors
+///
+/// Returns an error if the PR does not exist or the API request fails.
+fn ready(number: u64, repo: Option<&str>, hostname: Option<&str>) -> anyhow::Result<()> {
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let spec = if let Some(r) = repo {
+        parse_repo_spec(r).with_context(|| format!("invalid repository: {r}"))?
+    } else {
+        detect_remote().context("could not detect repository from git remote")?
+    };
+
+    let path = format!("/repos/{}/{}/pulls/{number}", spec.owner, spec.repo);
+
+    // First, fetch the PR to check if it's a draft.
+    let response = client.get(&path).context("failed to fetch PR")?;
+    let status = response.status();
+    if !status.is_success() {
+        anyhow::bail!("failed to fetch PR #{number}: HTTP {status}");
+    }
+
+    let pr: serde_json::Value = response.json().context("failed to parse PR response")?;
+    let is_draft = pr["draft"].as_bool().unwrap_or(false);
+
+    if !is_draft {
+        println!("PR #{number} is already ready for review.");
+        return Ok(());
+    }
+
+    // Mark the PR as ready by setting draft to false.
+    let body = serde_json::json!({"draft": false});
+    let body_bytes = serde_json::to_vec(&body).context("failed to serialize body")?;
+    let update_response = client
+        .request("PATCH", &path, &[], Some(body_bytes))
+        .context("failed to update PR")?;
+
+    let update_status = update_response.status();
+    if !update_status.is_success() {
+        let err_body: serde_json::Value = update_response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("update failed");
+        anyhow::bail!("failed to mark PR #{number} as ready: {msg}");
+    }
+
+    println!("PR #{number} is now ready for review.");
+    Ok(())
 }
 
 #[cfg(test)]
