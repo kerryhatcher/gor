@@ -1,6 +1,6 @@
 ---
 name: wrangler
-description: "Use for implementing gor feature stories. When the user says 'work on story X', 'implement X', 'next story', or references a story from docs/issues/, use this skill. Coordinates cheap worker subagents for rote implementation while the wrangler (you) plans, validates, integrates, and commits. Never implement a story directly — always delegate the bulk coding to workers."
+description: "Use for implementing gor feature stories. When the user says 'work on story X', 'implement X', 'next story', 'work on the next story', or references a story from docs/issues/, use this skill. If no specific story is named, a cheap scout agent determines the next ready story from the backlog. Coordinates cheap worker subagents for rote implementation while the wrangler (you) plans, validates, integrates, and commits. Never implement a story directly — always delegate the bulk coding to workers."
 ---
 
 # Wrangler — Story Implementation Workflow
@@ -17,6 +17,38 @@ Coordinate cheap worker subagents to implement `gor` feature stories. You (the w
 Use `ollama-cloud/deepseek-v4-flash` for all worker subagents unless the user overrides.
 
 ## Workflow (per story)
+
+### Step 0: Find Next Story (if no story specified)
+
+When the user says "next story" or "work on the next story" without naming a specific story, delegate to a cheap scout agent to determine what to work on.
+
+Launch a **scout** subagent with:
+- `context: "fork"`
+- `model: "ollama-cloud/deepseek-v4-flash"`
+- `reads: ["docs/issues/"]`
+
+**Scout prompt:**
+```
+Analyze the story backlog in docs/issues/ to find the next story to implement.
+
+For each story, extract from its YAML frontmatter:
+- status (todo, in_progress, done)
+- priority (P0, P1, P2, P3, P4)
+- phase (0-4)
+- blockedBy (list of story names that must be done first)
+
+Rules:
+1. Only consider stories with status: todo
+2. A story is ready if ALL stories in its blockedBy list have status: done
+3. Among ready stories, pick the highest priority (P0 > P1 > P2 > P3 > P4)
+4. If multiple at the same priority, pick the lowest phase first
+5. If still tied, pick the one that blocks the most other stories
+
+Output ONLY this JSON (no other text):
+{"story": "<filename without .md>", "priority": "<P0-P4>", "phase": <N>, "blocks": <count>, "reason": "<one-line explanation>"}
+```
+
+Parse the scout's JSON output. That's the story to implement. Proceed to Step 1.
 
 ### Step 1: Read & Plan
 
