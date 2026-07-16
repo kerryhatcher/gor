@@ -82,6 +82,21 @@ pub fn run(cmd: IssueCommand) -> anyhow::Result<()> {
             comment.as_deref(),
             hostname.as_deref(),
         ),
+        IssueCommand::Comment {
+            number,
+            repo,
+            body,
+            body_file,
+            web,
+            hostname,
+        } => comment(
+            number,
+            repo.as_deref(),
+            body.as_deref(),
+            body_file.as_deref(),
+            web,
+            hostname.as_deref(),
+        ),
     }
 }
 
@@ -476,6 +491,96 @@ fn reopen(
     }
 
     println!("✓ issue #{number} reopened");
+    Ok(())
+}
+
+/// Execute `gor issue comment`.
+///
+/// Adds a comment to an existing issue. Supports reading the comment body
+/// from a `--body` flag, a file (`--body-file`), or stdin (`@-`).
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the issue does not
+/// exist, or the API request fails.
+fn comment(
+    number: u64,
+    repo: Option<&str>,
+    body: Option<&str>,
+    body_file: Option<&str>,
+    web: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+
+    // Handle --web flag: open in browser
+    if web {
+        let web_url = format!(
+            "https://{host}/{}/{}/issues/{number}",
+            spec.owner, spec.repo
+        );
+        open_in_browser(&web_url);
+        return Ok(());
+    }
+
+    // Resolve the comment body
+    let comment_body = match (body, body_file) {
+        (Some(b), None) => b.to_string(),
+        (None, Some(f)) => {
+            if f == "@-" {
+                let mut buf = String::new();
+                std::io::stdin()
+                    .read_line(&mut buf)
+                    .context("failed to read from stdin")?;
+                buf
+            } else {
+                std::fs::read_to_string(f)
+                    .with_context(|| format!("failed to read body file '{f}'"))?
+            }
+        }
+        (None, None) => anyhow::bail!("either --body or --body-file is required"),
+        (Some(_), Some(_)) => unreachable!(), // clap conflicts_with prevents this
+    };
+
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let path = format!(
+        "/repos/{}/{}/issues/{number}/comments",
+        spec.owner, spec.repo
+    );
+    let request_body = serde_json::json!({ "body": comment_body });
+    let response = client
+        .request("POST", &path, &[], Some(serde_json::to_vec(&request_body)?))
+        .context("failed to post comment")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("issue #{number} not found in '{spec}'");
+    }
+    if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+        anyhow::bail!("authentication required to comment on issue #{number}");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to comment on issue #{number}: HTTP {status}");
+    }
+
+    let comment_json: serde_json::Value = response
+        .json()
+        .context("failed to parse comment response")?;
+
+    let html_url = comment_json["html_url"]
+        .as_str()
+        .unwrap_or("https://github.com/");
+    println!("✓ comment posted: {html_url}");
     Ok(())
 }
 
