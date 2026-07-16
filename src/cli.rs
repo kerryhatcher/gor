@@ -740,4 +740,21 @@ pub enum ReleaseCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Delete a release.
+    Delete {
+        /// Tag name or release ID.
+        release: String,
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Skip the confirmation prompt.
+        #[arg(short = 'y', long)]
+        yes: bool,
+        /// Keep the associated git tag (do not delete it).
+        #[arg(long)]
+        skip_tag: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }

@@ -40,6 +40,19 @@ pub fn run(cmd: ReleaseCommand) -> anyhow::Result<()> {
             json,
             hostname,
         } => view(&release, repo.as_deref(), web, json, hostname.as_deref()),
+        ReleaseCommand::Delete {
+            release,
+            repo,
+            yes,
+            skip_tag,
+            hostname,
+        } => delete(
+            &release,
+            repo.as_deref(),
+            yes,
+            skip_tag,
+            hostname.as_deref(),
+        ),
     }
 }
 
@@ -244,6 +257,118 @@ fn view(
     // Print formatted view
     print_release_view(&release_data);
     Ok(())
+}
+
+/// Execute `gor release delete`.
+///
+/// Deletes a release by tag name or database ID. Prompts for confirmation
+/// unless `--yes` is passed. Optionally keeps the associated git tag.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the release does not
+/// exist, or the API request fails.
+fn delete(
+    release: &str,
+    repo: Option<&str>,
+    yes: bool,
+    skip_tag: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Resolve the release to get its ID and tag name
+    let (release_id, tag_name) = resolve_release(&client, &spec.owner, &spec.repo, release)?;
+
+    // Confirmation prompt
+    if !yes {
+        use std::io::Write;
+        print!("Delete release '{tag_name}' (ID: {release_id}) from '{spec}'? [y/N] ");
+        std::io::stdout().flush().ok();
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input).ok();
+        let trimmed = input.trim().to_lowercase();
+        if trimmed != "y" && trimmed != "yes" {
+            println!("Cancelled.");
+            return Ok(());
+        }
+    }
+
+    // Build the delete URL with optional skip_tag
+    let mut path = format!("/repos/{}/{}/releases/{release_id}", spec.owner, spec.repo);
+    if skip_tag {
+        path.push_str("?skip_tag=true");
+    }
+
+    let response = client
+        .request("DELETE", &path, &[], None)
+        .context("failed to delete release")?;
+    let status = response.status();
+
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("release '{release}' not found in '{spec}'");
+    }
+    if status == reqwest::StatusCode::NO_CONTENT {
+        let tag_msg = if skip_tag { " (git tag preserved)" } else { "" };
+        println!("✓ Deleted release '{tag_name}'{tag_msg}");
+        return Ok(());
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to delete release '{release}': HTTP {status}");
+    }
+
+    Ok(())
+}
+
+/// Resolve a release identifier (tag or ID) to its numeric ID and tag name.
+///
+/// Tries by tag first, then falls back to numeric ID.
+fn resolve_release(
+    client: &Client,
+    owner: &str,
+    repo: &str,
+    release: &str,
+) -> anyhow::Result<(u64, String)> {
+    // Try by tag first
+    let tag_path = format!("/repos/{owner}/{repo}/releases/tags/{release}");
+    if let Ok(resp) = client.get(&tag_path) {
+        if resp.status().is_success() {
+            let data: serde_json::Value =
+                resp.json().context("failed to parse release response")?;
+            let id = data["id"]
+                .as_u64()
+                .context("release response missing 'id' field")?;
+            let tag = data["tag_name"].as_str().unwrap_or(release).to_string();
+            return Ok((id, tag));
+        }
+    }
+
+    // Try by numeric ID
+    let id: u64 = release
+        .parse()
+        .context("release not found by tag; provide a valid numeric release ID")?;
+    let id_path = format!("/repos/{owner}/{repo}/releases/{id}");
+    let resp = client.get(&id_path).context("failed to fetch release")?;
+    let status = resp.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("release '{release}' not found in '{owner}/{repo}'");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to resolve release '{release}': HTTP {status}");
+    }
+    let data: serde_json::Value = resp.json().context("failed to parse release response")?;
+    let tag = data["tag_name"].as_str().unwrap_or(release).to_string();
+    Ok((id, tag))
 }
 
 /// Print a formatted single-release view.
