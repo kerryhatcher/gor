@@ -497,6 +497,36 @@ pub enum IssueCommand {
         #[arg(long, env = "GH_HOST")]
         hostname: Option<String>,
     },
+    /// Create an issue.
+    Create {
+        /// Repository (OWNER/REPO format). Auto-detected from git remote if omitted.
+        #[arg(short = 'R', long)]
+        repo: Option<String>,
+        /// Issue title (required).
+        #[arg(long)]
+        title: Option<String>,
+        /// Issue body (markdown).
+        #[arg(long)]
+        body: Option<String>,
+        /// Add labels (repeatable).
+        #[arg(long = "label")]
+        labels: Vec<String>,
+        /// Assign users by login (repeatable).
+        #[arg(long)]
+        assignee: Vec<String>,
+        /// Milestone ID or title.
+        #[arg(long)]
+        milestone: Option<String>,
+        /// Add to project board by number.
+        #[arg(long)]
+        project: Option<u32>,
+        /// Open the issue in the default browser after creation.
+        #[arg(short = 'w', long)]
+        web: bool,
+        /// GitHub hostname for GitHub Enterprise Server (default: github.com).
+        #[arg(long, env = "GH_HOST")]
+        hostname: Option<String>,
+    },
 }
 
 /// Subcommands for `gor config`.

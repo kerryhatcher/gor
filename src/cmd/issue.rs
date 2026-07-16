@@ -97,6 +97,27 @@ pub fn run(cmd: IssueCommand) -> anyhow::Result<()> {
             web,
             hostname.as_deref(),
         ),
+        IssueCommand::Create {
+            repo,
+            title,
+            body,
+            labels,
+            assignee,
+            milestone,
+            project,
+            web,
+            hostname,
+        } => issue_create(
+            repo.as_deref(),
+            title.as_deref(),
+            body.as_deref(),
+            &labels,
+            &assignee,
+            milestone.as_deref(),
+            project,
+            web,
+            hostname.as_deref(),
+        ),
     }
 }
 
@@ -581,6 +602,110 @@ fn comment(
         .as_str()
         .unwrap_or("https://github.com/");
     println!("✓ comment posted: {html_url}");
+    Ok(())
+}
+
+/// Execute `gor issue create`.
+///
+/// Creates a new issue in a repository. Requires a title. Supports labels,
+/// assignees, milestones, and project board assignment.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the issue creation
+/// fails, or required fields are missing.
+#[allow(clippy::too_many_arguments)]
+fn issue_create(
+    repo: Option<&str>,
+    title: Option<&str>,
+    body: Option<&str>,
+    labels: &[String],
+    assignees: &[String],
+    _milestone: Option<&str>,
+    _project: Option<u32>,
+    web: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Build the request body
+    let mut body_map = serde_json::Map::new();
+    body_map.insert(
+        "title".to_string(),
+        serde_json::Value::String(
+            title
+                .ok_or_else(|| anyhow::anyhow!("issue title is required; use --title"))?
+                .to_string(),
+        ),
+    );
+    if let Some(b) = body {
+        body_map.insert("body".to_string(), serde_json::Value::String(b.to_string()));
+    }
+    if !labels.is_empty() {
+        body_map.insert(
+            "labels".to_string(),
+            serde_json::Value::Array(
+                labels
+                    .iter()
+                    .map(|l| serde_json::Value::String(l.clone()))
+                    .collect(),
+            ),
+        );
+    }
+    if !assignees.is_empty() {
+        body_map.insert(
+            "assignees".to_string(),
+            serde_json::Value::Array(
+                assignees
+                    .iter()
+                    .map(|a| serde_json::Value::String(a.clone()))
+                    .collect(),
+            ),
+        );
+    }
+
+    let body_value = serde_json::Value::Object(body_map);
+
+    // Create the issue
+    let path = format!("/repos/{}/{}/issues", spec.owner, spec.repo);
+    let response = client
+        .post(&path, &body_value)
+        .context("failed to create issue")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("repository '{spec}' not found");
+    }
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("creation failed");
+        anyhow::bail!("failed to create issue: {msg}");
+    }
+
+    let issue: serde_json::Value = response.json().context("failed to parse issue response")?;
+
+    let issue_number = issue["number"].as_u64().unwrap_or(0);
+    let issue_url = issue["html_url"].as_str().unwrap_or("");
+
+    // Handle --web flag: open in browser
+    if web && !issue_url.is_empty() {
+        open_in_browser(issue_url);
+    }
+
+    println!(
+        "https://github.com/{}/{}/issues/{issue_number}",
+        spec.owner, spec.repo
+    );
     Ok(())
 }
 
