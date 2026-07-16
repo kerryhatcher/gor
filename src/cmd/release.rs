@@ -130,6 +130,12 @@ pub fn run(cmd: ReleaseCommand) -> anyhow::Result<()> {
             skip_existing,
             hostname.as_deref(),
         ),
+        ReleaseCommand::DeleteAsset {
+            asset_id,
+            repo,
+            yes,
+            hostname,
+        } => delete_asset(asset_id, repo.as_deref(), yes, hostname.as_deref()),
     }
 }
 
@@ -913,6 +919,64 @@ fn download(
         println!("{}", output_path.display());
     }
 
+    Ok(())
+}
+
+/// Execute `gor release delete-asset`.
+///
+/// Deletes a specific asset from a release.
+///
+/// # Errors
+///
+/// Returns an error if the asset does not exist or the API request fails.
+fn delete_asset(
+    asset_id: u64,
+    repo: Option<&str>,
+    yes: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    if !yes {
+        use std::io::Write;
+        print!("Are you sure you want to delete asset {asset_id}? [y/N] ");
+        std::io::stdout().flush().ok();
+
+        let mut input = String::new();
+        std::io::stdin()
+            .read_line(&mut input)
+            .context("failed to read input")?;
+        let input = input.trim().to_lowercase();
+        if input != "y" && input != "yes" {
+            println!("Cancelled.");
+            return Ok(());
+        }
+    }
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let spec = if let Some(r) = repo {
+        parse_repo_spec(r).with_context(|| format!("invalid repository: {r}"))?
+    } else {
+        detect_remote().context("could not detect repository from git remote")?
+    };
+
+    let path = format!(
+        "/repos/{}/{}/releases/assets/{asset_id}",
+        spec.owner, spec.repo
+    );
+
+    let response = client
+        .request("DELETE", &path, &[], None)
+        .context("failed to delete asset")?;
+
+    let status = response.status();
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("delete failed");
+        anyhow::bail!("failed to delete asset {asset_id}: {msg}");
+    }
+
+    println!("Asset {asset_id} deleted.");
     Ok(())
 }
 

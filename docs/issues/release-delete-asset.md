@@ -4,7 +4,7 @@ priority: P2
 phase: 4
 endpoints:
   - DELETE /repos/{owner}/{repo}/releases/assets/{asset_id}
-status: todo
+status: done
 blockedBy: [release-view]
 blocks: []
 ---
