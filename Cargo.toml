@@ -7,9 +7,9 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.86"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/gor-sh/gor"
-documentation = "https://docs.rs/gor"
-homepage = "https://github.com/gor-sh/gor"
+repository = "https://github.com/kerryhatcher/gor"
+documentation = "https://docs.rs/gor-cli"
+homepage = "https://github.com/kerryhatcher/gor"
 
 [workspace.dependencies]
 clap = { version = "4", features = ["derive", "env"] }
@@ -51,8 +51,12 @@ too_many_lines = "allow"
 [workspace.metadata.cargo-shear]
 ignored = ["dirs", "gix", "miette", "indicatif", "console"]
 
+# Package name is `gor-cli` because the `gor` name was already taken on
+# crates.io (an unrelated VCS crate). The binary and lib are still named `gor`
+# below, so users get a `gor` command and `use gor::` keeps working.
+# ponytail: rename over vendoring/forking — crates.io has no namespacing.
 [package]
-name = "gor"
+name = "gor-cli"
 version = { workspace = true }
 edition = { workspace = true }
 rust-version = { workspace = true }
@@ -64,6 +68,13 @@ description = "A Rust CLI for GitHub — a 'gh' clone"
 readme = "README.md"
 keywords = ["github", "cli", "gh", "git"]
 categories = ["command-line-utilities", "development-tools"]
+
+[lib]
+name = "gor"
+
+[[bin]]
+name = "gor"
+path = "src/main.rs"
 
 [lints]
 workspace = true

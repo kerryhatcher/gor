@@ -2,8 +2,8 @@
 
 ### GitHub on Rust
 
-[![CI](https://img.shields.io/badge/CI-passing-2ea043?style=flat-square)](https://github.com/gor-sh/gor/actions)
-[![crates.io](https://img.shields.io/crates/v/gor?style=flat-square)](https://crates.io/crates/gor)
+[![CI](https://img.shields.io/badge/CI-passing-2ea043?style=flat-square)](https://github.com/kerryhatcher/gor/actions)
+[![crates.io](https://img.shields.io/crates/v/gor-cli?style=flat-square)](https://crates.io/crates/gor-cli)
 [![license](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg?style=flat-square)](LICENSE)
 [![MSRV](https://img.shields.io/badge/MSRV-1.86-blue?style=flat-square)](https://blog.rust-lang.org)
 
@@ -21,10 +21,10 @@ A fast, self-contained GitHub CLI written in Rust.
 
 ```sh
 # From source (compile)
-cargo install gor
+cargo install gor-cli
 
 # Prebuilt binary, no compile step
-cargo binstall gor
+cargo binstall gor-cli
 
 # Homebrew
 brew install gor
@@ -81,7 +81,7 @@ gor issue list
 
 - Extended guides and architecture: [docs/](docs/)
 - API fundamentals and feature roadmap: [docs/research/](docs/research/)
-- Crate API reference: published on [docs.rs](https://docs.rs/gor) with each release.
+- Crate API reference: published on [docs.rs](https://docs.rs/gor-cli) with each release.
 
 ## Contributing
 
