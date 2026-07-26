@@ -15,6 +15,9 @@ pub mod host;
 pub mod keyring_store;
 pub mod repository;
 
+pub mod label;
+pub mod util;
+
 /// Convenience re-exports of key types.
 pub use client::Client;
 pub use error::GorError;
