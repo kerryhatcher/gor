@@ -1,0 +1,44 @@
+[package]
+name = "gor-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+description = "A Rust CLI for GitHub — a 'gh' clone"
+readme = "README.md"
+keywords = ["github", "cli", "gh", "git"]
+categories = ["command-line-utilities", "development-tools"]
+
+[lib]
+name = "gor"
+
+[[bin]]
+name = "gor"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+keyring = ["gor-core/keyring"]
+
+[dependencies]
+gor-core = { path = "../gor-core" }
+clap = { workspace = true }
+clap_complete = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+miette = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+indicatif = { workspace = true }
+console = { workspace = true }
+gix = { workspace = true }
+serde_yaml_ng = { workspace = true }
+dirs = { workspace = true }

@@ -1,0 +1,2236 @@
+//! Implementation of the `gor pr` subcommand.
+//!
+//! Provides pull request listing, viewing, and management commands.
+//! Currently supports `gor pr list` for listing pull requests.
+
+#![allow(clippy::print_stdout, clippy::print_stderr)]
+
+use crate::cli::PrCommand;
+use crate::render::{format_date, print_json};
+use anyhow::Context;
+use gix::bstr::ByteSlice;
+use gor_core::client::Client;
+use gor_core::repository::{detect_remote, parse_repo_spec};
+use std::collections::BTreeMap;
+use std::io::Write;
+
+/// Run the `gor pr` subcommand.
+///
+/// # Errors
+///
+/// Returns an error if the command execution fails.
+pub fn run(cmd: PrCommand) -> anyhow::Result<()> {
+    match cmd {
+        PrCommand::List {
+            owner_repo,
+            state,
+            base,
+            head,
+            author,
+            labels,
+            assignee,
+            limit,
+            web,
+            json,
+            hostname,
+        } => list(
+            owner_repo,
+            &state,
+            base.as_deref(),
+            head.as_deref(),
+            author.as_deref(),
+            &labels,
+            assignee.as_deref(),
+            limit,
+            web,
+            json,
+            hostname.as_deref(),
+        ),
+        PrCommand::View {
+            number,
+            repo,
+            web,
+            comments,
+            json,
+            hostname,
+        } => view(
+            number,
+            repo.as_deref(),
+            web,
+            comments,
+            json,
+            hostname.as_deref(),
+        ),
+        PrCommand::Create {
+            repo,
+            title,
+            body,
+            base,
+            head,
+            draft,
+            labels,
+            assignee,
+            milestone,
+            project,
+            web,
+            hostname,
+        } => create(
+            repo.as_deref(),
+            title.as_deref(),
+            body.as_deref(),
+            base.as_deref(),
+            head.as_deref(),
+            draft,
+            &labels,
+            &assignee,
+            milestone.as_deref(),
+            project,
+            web,
+            hostname.as_deref(),
+        ),
+        PrCommand::Close {
+            number,
+            repo,
+            comment,
+            hostname,
+        } => close(
+            number,
+            repo.as_deref(),
+            comment.as_deref(),
+            hostname.as_deref(),
+        ),
+        PrCommand::Reopen {
+            number,
+            repo,
+            comment,
+            hostname,
+        } => reopen(
+            number,
+            repo.as_deref(),
+            comment.as_deref(),
+            hostname.as_deref(),
+        ),
+        PrCommand::Comment {
+            number,
+            repo,
+            body,
+            body_file,
+            web,
+            hostname,
+        } => pr_comment(
+            number,
+            repo.as_deref(),
+            body.as_deref(),
+            body_file.as_deref(),
+            web,
+            hostname.as_deref(),
+        ),
+        PrCommand::Merge {
+            number,
+            repo,
+            merge,
+            squash,
+            rebase,
+            body,
+            subject,
+            delete_branch,
+            admin,
+            auto,
+            hostname,
+        } => pr_merge(
+            number,
+            repo.as_deref(),
+            merge,
+            squash,
+            rebase,
+            body.as_deref(),
+            subject.as_deref(),
+            delete_branch,
+            admin,
+            auto,
+            hostname.as_deref(),
+        ),
+        PrCommand::Checkout {
+            number,
+            repo,
+            branch,
+            recurse_submodules,
+            hostname,
+        } => pr_checkout(
+            number,
+            repo.as_deref(),
+            branch.as_deref(),
+            recurse_submodules,
+            hostname.as_deref(),
+        ),
+        PrCommand::Diff {
+            number,
+            repo,
+            color,
+            name_only,
+            hostname,
+        } => diff(
+            number,
+            repo.as_deref(),
+            &color,
+            name_only,
+            hostname.as_deref(),
+        ),
+        PrCommand::Edit {
+            number,
+            repo,
+            title,
+            body,
+            base,
+            add_label,
+            remove_label,
+            add_assignee,
+            remove_assignee,
+            milestone,
+            hostname,
+        } => pr_edit(
+            number,
+            repo.as_deref(),
+            title.as_deref(),
+            body.as_deref(),
+            base.as_deref(),
+            &add_label,
+            &remove_label,
+            &add_assignee,
+            &remove_assignee,
+            milestone.as_deref(),
+            hostname.as_deref(),
+        ),
+        PrCommand::Review {
+            number,
+            repo,
+            approve,
+            request_changes,
+            comment,
+            body,
+            hostname,
+        } => review(
+            number,
+            repo.as_deref(),
+            approve,
+            request_changes,
+            comment,
+            body.as_deref(),
+            hostname.as_deref(),
+        ),
+        PrCommand::Checks {
+            number,
+            repo,
+            watch,
+            json,
+            hostname,
+        } => checks(number, repo.as_deref(), watch, json, hostname.as_deref()),
+        PrCommand::Ready {
+            number,
+            repo,
+            hostname,
+        } => ready(number, repo.as_deref(), hostname.as_deref()),
+    }
+}
+
+/// Execute `gor pr list`.
+///
+/// Lists pull requests for a repository with filtering by state, base branch,
+/// head branch, author, labels, and assignee. Supports table output, JSON
+/// output, and opening the PR list in a browser.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found or the API request fails.
+#[allow(clippy::too_many_arguments)]
+fn list(
+    owner_repo: Option<String>,
+    state: &str,
+    base: Option<&str>,
+    head: Option<&str>,
+    author: Option<&str>,
+    labels: &[String],
+    assignee: Option<&str>,
+    limit: u32,
+    web: bool,
+    json: Option<Vec<String>>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    // Resolve the repo spec
+    let spec = match owner_repo {
+        Some(s) => parse_repo_spec(&s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+
+    // Handle --web flag: open in browser
+    if web {
+        let web_url = format!("https://{host}/{}/{}/pulls", spec.owner, spec.repo);
+        open_in_browser(&web_url);
+        return Ok(());
+    }
+
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Build query parameters for the API call
+    // The GitHub API doesn't support "merged" as a state value; we use "all"
+    // and filter client-side for merged PRs.
+    let needs_merged_filter = state == "merged";
+    let api_state = if needs_merged_filter { "all" } else { state };
+
+    let mut query_params = vec![
+        ("state", api_state.to_string()),
+        ("per_page", limit.min(100).to_string()),
+    ];
+
+    if let Some(b) = base {
+        query_params.push(("base", (*b).to_string()));
+    }
+    if let Some(h) = head {
+        query_params.push(("head", (*h).to_string()));
+    }
+
+    let query_string = query_params
+        .iter()
+        .map(|(k, v)| format!("{k}={v}"))
+        .collect::<Vec<_>>()
+        .join("&");
+
+    let path = format!("/repos/{}/{}/pulls?{query_string}", spec.owner, spec.repo);
+
+    let response = client.get(&path).context("failed to fetch pull requests")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("repository '{spec}' not found");
+    }
+    if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+        anyhow::bail!("authentication required to list pull requests for '{spec}'");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to list pull requests for '{spec}': HTTP {status}");
+    }
+
+    let mut prs: Vec<serde_json::Value> = response
+        .json()
+        .context("failed to parse pull request response")?;
+
+    // Client-side filtering
+    if needs_merged_filter {
+        prs.retain(|pr| pr["merged_at"].as_str().is_some());
+    }
+    if let Some(a) = author {
+        prs.retain(|pr| {
+            pr["user"]["login"]
+                .as_str()
+                .is_some_and(|login| login.eq_ignore_ascii_case(a))
+        });
+    }
+    if !labels.is_empty() {
+        prs.retain(|pr| {
+            let pr_labels: Vec<&str> = pr["labels"]
+                .as_array()
+                .map(|arr| arr.iter().filter_map(|l| l["name"].as_str()).collect())
+                .unwrap_or_default();
+            labels
+                .iter()
+                .all(|label| pr_labels.iter().any(|l| l.eq_ignore_ascii_case(label)))
+        });
+    }
+    if let Some(a) = assignee {
+        prs.retain(|pr| {
+            pr["assignees"].as_array().is_some_and(|arr| {
+                arr.iter().any(|assignee| {
+                    assignee["login"]
+                        .as_str()
+                        .is_some_and(|login| login.eq_ignore_ascii_case(a))
+                })
+            })
+        });
+    }
+
+    // Handle --json flag
+    if let Some(fields) = json {
+        let fields_ref: Option<&[String]> = if fields.is_empty() {
+            None
+        } else {
+            Some(&fields)
+        };
+        print_json(&prs, fields_ref);
+        return Ok(());
+    }
+
+    // Default: print formatted table
+    print_pr_table(&prs);
+    Ok(())
+}
+
+/// Execute `gor pr view`.
+///
+/// Displays the full details of a single pull request, including title, body,
+/// author, state, branch information, labels, review status, merge status, and
+/// CI check status. Supports JSON output and opening the PR in a browser.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the PR does not exist,
+/// or the API request fails.
+#[allow(clippy::too_many_arguments)]
+fn view(
+    number: u64,
+    repo: Option<&str>,
+    web: bool,
+    comments: bool,
+    json: Option<Vec<String>>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    // Resolve the repo spec
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+
+    // Handle --web flag: open in browser
+    if web {
+        let web_url = format!("https://{host}/{}/{}/pull/{number}", spec.owner, spec.repo);
+        open_in_browser(&web_url);
+        return Ok(());
+    }
+
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Fetch the PR details
+    let path = format!("/repos/{}/{}/pulls/{number}", spec.owner, spec.repo);
+    let response = client.get(&path).context("failed to fetch pull request")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("pull request #{number} not found in '{spec}'");
+    }
+    if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
+        anyhow::bail!("authentication required to view pull request #{number}");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to view pull request #{number}: HTTP {status}");
+    }
+
+    let pr: serde_json::Value = response
+        .json()
+        .context("failed to parse pull request response")?;
+
+    // Handle --json flag
+    if let Some(fields) = json {
+        let fields_ref: Option<&[String]> = if fields.is_empty() {
+            None
+        } else {
+            Some(&fields)
+        };
+        print_json(&pr, fields_ref);
+        return Ok(());
+    }
+
+    // Fetch reviews for review status
+    let reviews_path = format!("/repos/{}/{}/pulls/{number}/reviews", spec.owner, spec.repo);
+    let reviews: Vec<serde_json::Value> = client
+        .get(&reviews_path)
+        .ok()
+        .and_then(|r| r.json().ok())
+        .unwrap_or_default();
+
+    // Fetch CI check status
+    let head_sha = pr["head"]["sha"].as_str().unwrap_or("");
+    let ci_status = if head_sha.is_empty() {
+        None
+    } else {
+        let status_path = format!(
+            "/repos/{}/{}/commits/{head_sha}/status",
+            spec.owner, spec.repo
+        );
+        client.get(&status_path).ok().and_then(|r| r.json().ok())
+    };
+
+    // Fetch comments if --comments flag is set
+    let comments_data = if comments {
+        let comments_path = format!(
+            "/repos/{}/{}/issues/{number}/comments",
+            spec.owner, spec.repo
+        );
+        client
+            .get(&comments_path)
+            .ok()
+            .and_then(|r| r.json().ok())
+            .unwrap_or_default()
+    } else {
+        Vec::<serde_json::Value>::new()
+    };
+
+    // Print formatted view
+    print_pr_view(&pr, &reviews, ci_status.as_ref(), &comments_data);
+    Ok(())
+}
+
+/// Execute `gor pr create`.
+///
+/// Creates a pull request from the current branch to the base branch.
+/// Auto-detects the head branch from the current git branch and the base
+/// branch from the repository's default branch. Supports draft PRs, labels,
+/// assignees, milestones, and project board assignment.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the PR creation fails,
+/// or required fields are missing.
+#[allow(clippy::too_many_arguments)]
+fn create(
+    repo: Option<&str>,
+    title: Option<&str>,
+    body: Option<&str>,
+    base: Option<&str>,
+    head: Option<&str>,
+    draft: bool,
+    labels: &[String],
+    assignees: &[String],
+    _milestone: Option<&str>,
+    _project: Option<u32>,
+    web: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    // Resolve the repo spec
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Auto-detect head branch from current git branch if not specified
+    let head_branch = if let Some(b) = head {
+        b.to_string()
+    } else {
+        let repo =
+            gix::discover(std::env::current_dir().context("failed to get current directory")?)
+                .context("failed to discover git repository")?;
+        let head_ref = repo.head().context("failed to get HEAD")?;
+        head_ref
+            .name()
+            .shorten()
+            .to_str()
+            .context("branch name is not valid UTF-8")?
+            .to_string()
+    };
+
+    // Auto-detect base branch from repo's default branch if not specified
+    let base_branch = if let Some(b) = base {
+        b.to_string()
+    } else {
+        let path = format!("/repos/{}/{}", spec.owner, spec.repo);
+        let response = client
+            .get(&path)
+            .context("failed to fetch repository data")?;
+        let status = response.status();
+        if !status.is_success() {
+            anyhow::bail!("failed to fetch repository '{spec}': HTTP {status}");
+        }
+        let repo_data: serde_json::Value = response
+            .json()
+            .context("failed to parse repository response")?;
+        repo_data["default_branch"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("could not determine default branch"))?
+            .to_string()
+    };
+
+    // Build the request body
+    let mut body_map = serde_json::Map::new();
+    body_map.insert(
+        "title".to_string(),
+        serde_json::Value::String(
+            title
+                .ok_or_else(|| anyhow::anyhow!("PR title is required; use --title"))?
+                .to_string(),
+        ),
+    );
+    body_map.insert("head".to_string(), serde_json::Value::String(head_branch));
+    body_map.insert("base".to_string(), serde_json::Value::String(base_branch));
+    if let Some(b) = body {
+        body_map.insert("body".to_string(), serde_json::Value::String(b.to_string()));
+    }
+    if draft {
+        body_map.insert("draft".to_string(), serde_json::Value::Bool(true));
+    }
+
+    let body_value = serde_json::Value::Object(body_map);
+
+    // Create the PR
+    let path = format!("/repos/{}/{}/pulls", spec.owner, spec.repo);
+    let response = client
+        .post(&path, &body_value)
+        .context("failed to create pull request")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("repository '{spec}' not found");
+    }
+    if status == reqwest::StatusCode::UNPROCESSABLE_ENTITY {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("validation failed");
+        anyhow::bail!("failed to create pull request: {msg}");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to create pull request: HTTP {status}");
+    }
+
+    let pr: serde_json::Value = response
+        .json()
+        .context("failed to parse pull request response")?;
+
+    let pr_number = pr["number"].as_u64().unwrap_or(0);
+    let pr_url = pr["html_url"].as_str().unwrap_or("");
+
+    // Handle --web flag: open in browser
+    if web && !pr_url.is_empty() {
+        open_in_browser(pr_url);
+    }
+
+    // Print success message
+    println!(
+        "https://github.com/{}/{}/pull/{pr_number}",
+        spec.owner, spec.repo
+    );
+
+    // Add labels if specified
+    if !labels.is_empty() {
+        let labels_path = format!(
+            "/repos/{}/{}/issues/{pr_number}/labels",
+            spec.owner, spec.repo
+        );
+        let labels_body = serde_json::json!({"labels": labels});
+        if let Err(e) = client.post(&labels_path, &labels_body) {
+            eprintln!("Warning: failed to add labels: {e}");
+        }
+    }
+
+    // Add assignees if specified
+    if !assignees.is_empty() {
+        let assignees_path = format!(
+            "/repos/{}/{}/issues/{pr_number}/assignees",
+            spec.owner, spec.repo
+        );
+        let assignees_body = serde_json::json!({"assignees": assignees});
+        if let Err(e) = client.post(&assignees_path, &assignees_body) {
+            eprintln!("Warning: failed to add assignees: {e}");
+        }
+    }
+
+    Ok(())
+}
+
+/// Execute `gor pr close`.
+///
+/// Closes a pull request by its number. Optionally adds a closing comment.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the PR does not exist,
+/// or the API request fails.
+fn close(
+    number: u64,
+    repo: Option<&str>,
+    comment: Option<&str>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    // Resolve the repo spec
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Add a closing comment if specified
+    if let Some(body) = comment {
+        let comment_path = format!(
+            "/repos/{}/{}/issues/{number}/comments",
+            spec.owner, spec.repo
+        );
+        let comment_body = serde_json::json!({"body": body});
+        client
+            .post(&comment_path, &comment_body)
+            .context("failed to add closing comment")?;
+    }
+
+    // Close the PR by setting state to "closed"
+    let path = format!("/repos/{}/{}/pulls/{number}", spec.owner, spec.repo);
+    let body = serde_json::json!({"state": "closed"});
+    let response = client
+        .request(
+            "PATCH",
+            &path,
+            &[],
+            Some(serde_json::to_vec(&body).unwrap_or_default()),
+        )
+        .context("failed to close pull request")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("pull request #{number} not found in '{spec}'");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to close pull request #{number}: HTTP {status}");
+    }
+
+    println!("Closed pull request #{number} in {spec}");
+    Ok(())
+}
+
+/// Execute `gor pr reopen`.
+///
+/// Reopens a closed pull request by its number. Optionally adds a comment.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the PR does not exist,
+/// or the API request fails.
+fn reopen(
+    number: u64,
+    repo: Option<&str>,
+    comment: Option<&str>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    // Resolve the repo spec
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Add a comment if specified
+    if let Some(body) = comment {
+        let comment_path = format!(
+            "/repos/{}/{}/issues/{number}/comments",
+            spec.owner, spec.repo
+        );
+        let comment_body = serde_json::json!({"body": body});
+        client
+            .post(&comment_path, &comment_body)
+            .context("failed to add comment")?;
+    }
+
+    // Reopen the PR by setting state to "open"
+    let path = format!("/repos/{}/{}/pulls/{number}", spec.owner, spec.repo);
+    let body = serde_json::json!({"state": "open"});
+    let response = client
+        .request(
+            "PATCH",
+            &path,
+            &[],
+            Some(serde_json::to_vec(&body).unwrap_or_default()),
+        )
+        .context("failed to reopen pull request")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("pull request #{number} not found in '{spec}'");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to reopen pull request #{number}: HTTP {status}");
+    }
+
+    println!("Reopened pull request #{number} in {spec}");
+    Ok(())
+}
+
+/// Execute `gor pr comment`.
+///
+/// Adds a comment to a pull request's conversation thread.
+/// Supports markdown body text, reading from a file or stdin, and
+/// opening the PR in a browser after commenting.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the PR does not exist,
+/// or the API request fails.
+fn pr_comment(
+    number: u64,
+    repo: Option<&str>,
+    body: Option<&str>,
+    body_file: Option<&str>,
+    web: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+
+    // Handle --web flag: open in browser
+    if web {
+        let web_url = format!("https://{host}/{}/{}/pull/{number}", spec.owner, spec.repo);
+        open_in_browser(&web_url);
+        return Ok(());
+    }
+
+    // Resolve the comment body
+    let comment_body = match (body, body_file) {
+        (Some(b), None) => b.to_string(),
+        (None, Some(f)) => {
+            if f == "@-" {
+                let mut buf = String::new();
+                std::io::stdin()
+                    .read_line(&mut buf)
+                    .context("failed to read from stdin")?;
+                buf
+            } else {
+                std::fs::read_to_string(f)
+                    .with_context(|| format!("failed to read body file '{f}'"))?
+            }
+        }
+        (None, None) => anyhow::bail!("either --body or --body-file is required"),
+        (Some(_), Some(_)) => unreachable!(), // clap conflicts_with prevents this
+    };
+
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let path = format!(
+        "/repos/{}/{}/issues/{number}/comments",
+        spec.owner, spec.repo
+    );
+    let request_body = serde_json::json!({"body": comment_body});
+    let response = client
+        .request("POST", &path, &[], Some(serde_json::to_vec(&request_body)?))
+        .context("failed to post comment")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("pull request #{number} not found in '{spec}'");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to comment on pull request #{number}: HTTP {status}");
+    }
+
+    let comment: serde_json::Value = response
+        .json()
+        .context("failed to parse comment response")?;
+
+    let comment_url = comment["html_url"].as_str().unwrap_or("");
+    println!("{comment_url}");
+
+    Ok(())
+}
+
+/// Execute `gor pr merge`.
+///
+/// Merges a pull request into its base branch. Supports merge commit, squash,
+/// and rebase strategies. Can delete the head branch after merging, bypass
+/// branch protection with admin privileges, and enable auto-merge.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the PR does not exist,
+/// the merge fails, or the API request fails.
+#[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
+fn pr_merge(
+    number: u64,
+    repo: Option<&str>,
+    _merge: bool,
+    squash: bool,
+    rebase: bool,
+    body: Option<&str>,
+    subject: Option<&str>,
+    delete_branch: bool,
+    _admin: bool,
+    _auto: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    // Resolve the repo spec
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Determine merge method
+    let merge_method = if squash {
+        "squash"
+    } else if rebase {
+        "rebase"
+    } else {
+        "merge"
+    };
+
+    // Build the request body
+    let mut body_map = serde_json::Map::new();
+    body_map.insert(
+        "merge_method".to_string(),
+        serde_json::Value::String(merge_method.to_string()),
+    );
+    if let Some(s) = subject {
+        body_map.insert(
+            "commit_title".to_string(),
+            serde_json::Value::String(s.to_string()),
+        );
+    }
+    if let Some(b) = body {
+        body_map.insert(
+            "commit_message".to_string(),
+            serde_json::Value::String(b.to_string()),
+        );
+    }
+
+    let body_value = serde_json::Value::Object(body_map);
+
+    // Merge the PR
+    let path = format!("/repos/{}/{}/pulls/{number}/merge", spec.owner, spec.repo);
+    let response = client
+        .request("PUT", &path, &[], Some(serde_json::to_vec(&body_value)?))
+        .context("failed to merge pull request")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("pull request #{number} not found in '{spec}'");
+    }
+    if status == reqwest::StatusCode::METHOD_NOT_ALLOWED {
+        anyhow::bail!("pull request #{number} cannot be merged");
+    }
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("merge failed");
+        anyhow::bail!("failed to merge pull request #{number}: {msg}");
+    }
+
+    let result: serde_json::Value = response.json().context("failed to parse merge response")?;
+
+    let sha = result["sha"].as_str().unwrap_or("");
+    let merged = result["merged"].as_bool().unwrap_or(false);
+
+    if merged {
+        println!("Merged pull request #{number} in {spec} (SHA: {sha})");
+    } else {
+        let msg = result["message"].as_str().unwrap_or("unknown reason");
+        anyhow::bail!("failed to merge pull request #{number}: {msg}");
+    }
+
+    // Delete the head branch if requested
+    if delete_branch {
+        // First, get the PR details to find the head branch ref
+        let pr_path = format!("/repos/{}/{}/pulls/{number}", spec.owner, spec.repo);
+        let pr_response = client
+            .get(&pr_path)
+            .context("failed to fetch pull request details")?;
+        if let Ok(pr_data) = pr_response.json::<serde_json::Value>() {
+            if let (Some(ref_name), Some(repo_name)) = (
+                pr_data["head"]["ref"].as_str(),
+                pr_data["head"]["repo"]["full_name"].as_str(),
+            ) {
+                // Only delete if the head branch is in the same repo
+                if repo_name == spec.to_string() {
+                    let delete_path = format!(
+                        "/repos/{}/{}/git/refs/heads/{ref_name}",
+                        spec.owner, spec.repo
+                    );
+                    if let Err(e) = client.request("DELETE", &delete_path, &[], None) {
+                        eprintln!("Warning: failed to delete head branch '{ref_name}': {e}");
+                    } else {
+                        println!("Deleted head branch '{ref_name}'");
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Execute `gor pr checkout`.
+///
+/// Fetches and checks out a pull request's head branch locally.
+/// Adds the remote if not already present. Supports custom local branch
+/// names.
+///
+/// # Errors
+///
+/// Returns an error if the repository cannot be found, the PR does not exist,
+/// or the checkout fails.
+fn pr_checkout(
+    number: u64,
+    repo: Option<&str>,
+    branch: Option<&str>,
+    _recurse_submodules: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    // Resolve the repo spec
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO with --repo"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Fetch PR details to get head branch info
+    let path = format!("/repos/{}/{}/pulls/{number}", spec.owner, spec.repo);
+    let response = client.get(&path).context("failed to fetch pull request")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("pull request #{number} not found in '{spec}'");
+    }
+    if !status.is_success() {
+        anyhow::bail!("failed to fetch pull request #{number}: HTTP {status}");
+    }
+
+    let pr: serde_json::Value = response
+        .json()
+        .context("failed to parse pull request response")?;
+
+    let head_ref = pr["head"]["ref"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("could not determine head branch"))?;
+    let _head_sha = pr["head"]["sha"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("could not determine head SHA"))?;
+    let head_repo_full_name = pr["head"]["repo"]["full_name"].as_str();
+    let head_clone_url = pr["head"]["repo"]["clone_url"].as_str();
+
+    // Determine the local branch name
+    let local_branch = branch.unwrap_or(head_ref);
+
+    // Open the local git repo
+    let local_repo =
+        gix::discover(std::env::current_dir().context("failed to get current directory")?)
+            .context("failed to discover git repository")?;
+
+    // Determine the remote name to use
+    let remote_name = if head_repo_full_name.is_some()
+        && head_repo_full_name != Some(spec.to_string().as_str())
+    {
+        // PR is from a fork — use the fork owner as remote name
+        let fork_owner = head_repo_full_name
+            .and_then(|n| n.split('/').next())
+            .unwrap_or("fork");
+
+        // Check if the remote already exists
+        let remote_exists = local_repo.find_remote(fork_owner).is_ok();
+
+        if !remote_exists {
+            if let Some(clone_url) = head_clone_url {
+                eprintln!("Adding remote '{fork_owner}' -> {clone_url}");
+                let config_path = local_repo.git_dir().join("config");
+                let mut file = std::fs::OpenOptions::new()
+                    .append(true)
+                    .open(&config_path)
+                    .context("failed to open git config")?;
+                let url_escaped = clone_url.replace('"', "\\\"");
+                writeln!(
+                    file,
+                    "[remote \"{fork_owner}\"]\n\turl = {url_escaped}\n\tfetch = +refs/heads/*:refs/remotes/{fork_owner}/*"
+                )
+                .context("failed to write remote config")?;
+            }
+        }
+
+        fork_owner.to_string()
+    } else {
+        // PR is from the same repo — use origin
+        "origin".to_string()
+    };
+
+    // Fetch the PR head branch using gix
+    eprintln!("Fetching remote '{remote_name}' with branch '{head_ref}'...");
+
+    let workdir = local_repo
+        .workdir()
+        .ok_or_else(|| anyhow::anyhow!("bare repository cannot check out"))?;
+    let workdir_str = workdir.to_str().unwrap_or(".");
+
+    // Fetch the specific ref from the remote using system git
+    let fetch_status = std::process::Command::new("git")
+        .args([
+            "-C",
+            workdir_str,
+            "fetch",
+            &remote_name,
+            &format!("+refs/heads/{head_ref}:refs/remotes/{remote_name}/{head_ref}"),
+        ])
+        .status()
+        .context("failed to run git fetch")?;
+
+    if !fetch_status.success() {
+        anyhow::bail!("failed to fetch from remote '{remote_name}'");
+    }
+
+    // Create or update the local branch and check it out
+    eprintln!("Checking out '{local_branch}'...");
+
+    let checkout_status = std::process::Command::new("git")
+        .args([
+            "-C",
+            workdir_str,
+            "checkout",
+            "-B",
+            local_branch,
+            &format!("refs/remotes/{remote_name}/{head_ref}"),
+        ])
+        .status()
+        .context("failed to run git checkout")?;
+
+    if !checkout_status.success() {
+        anyhow::bail!("failed to checkout branch '{local_branch}'");
+    }
+
+    println!("Checked out PR #{number} as '{local_branch}'");
+    Ok(())
+}
+
+/// Print a formatted pull request detail view.
+///
+/// Displays title, metadata, body, review status, merge status, CI checks,
+/// and optionally comments.
+fn print_pr_view(
+    pr: &serde_json::Value,
+    reviews: &[serde_json::Value],
+    ci_status: Option<&serde_json::Value>,
+    comments: &[serde_json::Value],
+) {
+    // Title
+    let title = pr["title"].as_str().unwrap_or("(no title)");
+    println!("{title}");
+    let separator_len = title.len().min(80);
+    println!("{}", "─".repeat(separator_len));
+    println!();
+
+    // Metadata
+    let state = pr["state"].as_str().unwrap_or("unknown");
+    let display_state = if pr["merged_at"].as_str().is_some() {
+        "merged"
+    } else {
+        state
+    };
+    let author = pr["user"]["login"].as_str().unwrap_or("unknown");
+    let created = pr["created_at"]
+        .as_str()
+        .map_or_else(|| "—".to_string(), format_date);
+    let updated = pr["updated_at"]
+        .as_str()
+        .map_or_else(|| "—".to_string(), format_date);
+    let base_branch = pr["base"]["ref"].as_str().unwrap_or("?");
+    let head_branch = pr["head"]["ref"].as_str().unwrap_or("?");
+
+    let labels_str = pr["labels"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|l| l["name"].as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
+
+    println!("State:  {display_state}");
+    println!("Author: {author}");
+    println!("Created: {created}");
+    println!("Updated: {updated}");
+    println!("Branches: {base_branch} ← {head_branch}");
+    if !labels_str.is_empty() {
+        println!("Labels: {labels_str}");
+    }
+    println!();
+
+    // Body
+    let body = pr["body"].as_str().unwrap_or("");
+    if !body.is_empty() {
+        println!("{body}");
+        println!();
+    }
+
+    // Review status
+    print_review_status(reviews);
+
+    // Merge status
+    print_merge_status(pr);
+
+    // CI checks
+    print_ci_status(ci_status);
+
+    // Comments
+    if !comments.is_empty() {
+        println!("── Comments ──");
+        println!();
+        for comment in comments {
+            let comment_author = comment["user"]["login"].as_str().unwrap_or("unknown");
+            let comment_date = comment["created_at"]
+                .as_str()
+                .map_or_else(|| "—".to_string(), format_date);
+            let comment_body = comment["body"].as_str().unwrap_or("");
+            println!("{comment_author} commented on {comment_date}");
+            println!();
+            println!("{comment_body}");
+            println!();
+        }
+    }
+}
+
+/// Print the review status section.
+fn print_review_status(reviews: &[serde_json::Value]) {
+    // Aggregate the latest review state per reviewer
+    // Reviews are ordered oldest-first; we want the latest per user
+    let mut latest_state: BTreeMap<&str, &str> = BTreeMap::new();
+    for review in reviews {
+        let user = review["user"]["login"].as_str();
+        let state_val = review["state"].as_str();
+        if let (Some(u), Some(s)) = (user, state_val) {
+            if s != "COMMENTED" && s != "DISMISSED" {
+                // APPROVED or CHANGES_REQUESTED override previous
+                latest_state.insert(u, s);
+            } else if s == "COMMENTED" && !latest_state.contains_key(u) {
+                // Only set COMMENTED if no approval/change request yet
+                latest_state.insert(u, s);
+            }
+        }
+    }
+
+    if latest_state.is_empty() {
+        return;
+    }
+
+    println!("── Review Status ──");
+
+    let mut approved: Vec<&str> = Vec::new();
+    let mut changes_requested: Vec<&str> = Vec::new();
+    let mut commented: Vec<&str> = Vec::new();
+
+    for (user, state_val) in &latest_state {
+        match *state_val {
+            "APPROVED" => approved.push(user),
+            "CHANGES_REQUESTED" => changes_requested.push(user),
+            _ => commented.push(user),
+        }
+    }
+
+    if !approved.is_empty() {
+        println!("Approved by: {}", approved.join(", "));
+    }
+    if !changes_requested.is_empty() {
+        println!("Changes requested by: {}", changes_requested.join(", "));
+    }
+    if !commented.is_empty() {
+        println!("Commented by: {}", commented.join(", "));
+    }
+
+    println!();
+}
+
+/// Print the merge status section.
+fn print_merge_status(pr: &serde_json::Value) {
+    println!("── Merge Status ──");
+
+    let mergeable = pr["mergeable"].as_bool();
+    let mergeable_status = match mergeable {
+        Some(true) => "yes",
+        Some(false) => "no (conflicts)",
+        None => "unknown (checking)",
+    };
+    println!("Mergeable: {mergeable_status}");
+
+    if let Some(merged_at) = pr["merged_at"].as_str() {
+        let merged_date = format_date(merged_at);
+        let merged_by = pr["merged_by"]["login"].as_str().unwrap_or("unknown");
+        println!("Merged: yes ({merged_date}) by {merged_by}");
+    } else {
+        println!("Merged: no");
+    }
+
+    println!();
+}
+
+/// Print the CI check status section.
+fn print_ci_status(ci_status: Option<&serde_json::Value>) {
+    let statuses = ci_status
+        .and_then(|s| s["statuses"].as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    if statuses.is_empty() {
+        return;
+    }
+
+    println!("── CI Checks ──");
+
+    for check in &statuses {
+        let name = check["context"].as_str().unwrap_or("?");
+        let state_val = check["state"].as_str().unwrap_or("unknown");
+        let (icon, display_state) = match state_val {
+            "success" => ("✓", "success"),
+            "failure" => ("✗", "failure"),
+            "pending" => ("○", "pending"),
+            _ => ("○", state_val),
+        };
+        println!("  {icon} {name} ({display_state})");
+    }
+
+    println!();
+}
+
+/// Print a formatted pull request list table.
+///
+/// Columns: NUMBER, TITLE, AUTHOR, HEAD BRANCH, LABELS, STATE
+fn print_pr_table(prs: &[serde_json::Value]) {
+    if prs.is_empty() {
+        println!("No pull requests found.");
+        return;
+    }
+
+    // Column widths
+    let num_width = 8;
+    let title_width = 50;
+    let author_width = 14;
+    let branch_width = 14;
+    let labels_width = 14;
+    let state_width = 8;
+
+    // Header
+    println!(
+        "{:>num_width$}  {:<title_width$}  {:<author_width$}  {:<branch_width$}  {:<labels_width$}  {:<state_width$}",
+        "NUMBER", "TITLE", "AUTHOR", "HEAD BRANCH", "LABELS", "STATE",
+    );
+
+    for pr in prs {
+        let number = pr["number"]
+            .as_u64()
+            .map_or_else(|| "—".to_string(), |n| n.to_string());
+        let title = pr["title"].as_str().unwrap_or("—");
+        let author = pr["user"]["login"].as_str().unwrap_or("—");
+        let head_branch = pr["head"]["ref"].as_str().unwrap_or("—");
+        let state = pr["state"].as_str().unwrap_or("—");
+
+        // Determine display state: if merged_at is set, show "merged"
+        let display_state = if pr["merged_at"].as_str().is_some() {
+            "merged"
+        } else {
+            state
+        };
+
+        let labels_str = pr["labels"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|l| l["name"].as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default();
+        let labels_display = if labels_str.is_empty() {
+            "—".to_string()
+        } else {
+            labels_str
+        };
+
+        let title_truncated = crate::cmd::util::truncate(title, title_width);
+        let author_truncated = crate::cmd::util::truncate(author, author_width);
+        let branch_truncated = crate::cmd::util::truncate(head_branch, branch_width);
+        let labels_truncated = crate::cmd::util::truncate(&labels_display, labels_width);
+
+        println!(
+            "{number:>num_width$}  {title_truncated:<title_width$}  {author_truncated:<author_width$}  {branch_truncated:<branch_width$}  {labels_truncated:<labels_width$}  {display_state:<state_width$}",
+        );
+    }
+}
+
+/// Open a URL in the default browser using the system's default handler.
+fn open_in_browser(url: &str) {
+    #[cfg(target_os = "linux")]
+    {
+        let _ = std::process::Command::new("xdg-open").arg(url).spawn();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open").arg(url).spawn();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let _ = std::process::Command::new("cmd")
+            .args(["/c", "start", url])
+            .spawn();
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+    {
+        println!("Open {url} in your browser");
+    }
+}
+
+/// Execute `gor pr diff`.
+///
+/// Shows the unified diff of a pull request. Supports color control and
+/// name-only mode.
+///
+/// # Errors
+///
+/// Returns an error if the PR cannot be found or the API request fails.
+fn diff(
+    number: u64,
+    repo: Option<&str>,
+    _color: &str,
+    name_only: bool,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    if name_only {
+        // Fetch list of changed files
+        let files_path = format!(
+            "/repos/{}/{}/pulls/{number}/files?per_page=100",
+            spec.owner, spec.repo
+        );
+        let resp = client
+            .get(&files_path)
+            .context("failed to fetch PR files")?;
+        let status = resp.status();
+        if status == reqwest::StatusCode::NOT_FOUND {
+            anyhow::bail!("pull request #{number} not found in '{spec}'");
+        }
+        if !status.is_success() {
+            anyhow::bail!("failed to fetch PR files: HTTP {status}");
+        }
+        let files: Vec<serde_json::Value> =
+            resp.json().context("failed to parse files response")?;
+        for file in &files {
+            let filename = file["filename"].as_str().unwrap_or("—");
+            let status_str = file["status"].as_str().unwrap_or("");
+            let additions = file["additions"].as_u64().unwrap_or(0);
+            let deletions = file["deletions"].as_u64().unwrap_or(0);
+            println!("{status_str:8} +{additions:4} -{deletions:4}  {filename}");
+        }
+    } else {
+        // Fetch the diff
+        let diff_path = format!("/repos/{}/{}/pulls/{number}", spec.owner, spec.repo);
+        let resp = client
+            .request(
+                "GET",
+                &diff_path,
+                &["Accept: application/vnd.github.v3.diff".to_string()],
+                None,
+            )
+            .context("failed to fetch PR diff")?;
+        let status = resp.status();
+        if status == reqwest::StatusCode::NOT_FOUND {
+            anyhow::bail!("pull request #{number} not found in '{spec}'");
+        }
+        if !status.is_success() {
+            anyhow::bail!("failed to fetch PR diff: HTTP {status}");
+        }
+        let diff_text = resp.text().context("failed to read diff response")?;
+        println!("{diff_text}");
+    }
+
+    Ok(())
+}
+
+/// Execute `gor pr edit`.
+///
+/// Edits a pull request's title, body, base branch, labels, assignees,
+/// or milestone.
+///
+/// # Errors
+///
+/// Returns an error if the PR cannot be found or the API request fails.
+#[allow(clippy::too_many_arguments)]
+fn pr_edit(
+    number: u64,
+    repo: Option<&str>,
+    title: Option<&str>,
+    body: Option<&str>,
+    base: Option<&str>,
+    add_label: &[String],
+    remove_label: &[String],
+    add_assignee: &[String],
+    remove_assignee: &[String],
+    milestone: Option<&str>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let mut body_map = serde_json::Map::new();
+    if let Some(t) = title {
+        body_map.insert(
+            "title".to_string(),
+            serde_json::Value::String(t.to_string()),
+        );
+    }
+    if let Some(b) = body {
+        body_map.insert("body".to_string(), serde_json::Value::String(b.to_string()));
+    }
+    if let Some(b) = base {
+        body_map.insert("base".to_string(), serde_json::Value::String(b.to_string()));
+    }
+    if let Some(m) = milestone {
+        if let Ok(id) = m.parse::<u64>() {
+            body_map.insert(
+                "milestone".to_string(),
+                serde_json::Value::Number(serde_json::Number::from(id)),
+            );
+        } else {
+            body_map.insert(
+                "milestone".to_string(),
+                serde_json::Value::String(m.to_string()),
+            );
+        }
+    }
+
+    // Handle labels: fetch current, add, remove
+    if !add_label.is_empty() || !remove_label.is_empty() {
+        let get_path = format!("/repos/{}/{}/pulls/{number}", spec.owner, spec.repo);
+        let current: serde_json::Value = client
+            .get(&get_path)
+            .context("failed to fetch current PR")?
+            .json()
+            .context("failed to parse PR response")?;
+        let current_labels: Vec<String> = current["labels"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|l| l["name"].as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let mut new_labels = current_labels;
+        for label in add_label {
+            if !new_labels.contains(label) {
+                new_labels.push(label.clone());
+            }
+        }
+        new_labels.retain(|l| !remove_label.contains(l));
+        body_map.insert(
+            "labels".to_string(),
+            serde_json::Value::Array(
+                new_labels
+                    .iter()
+                    .map(|l| serde_json::Value::String(l.clone()))
+                    .collect(),
+            ),
+        );
+    }
+
+    // Handle assignees
+    if !add_assignee.is_empty() || !remove_assignee.is_empty() {
+        let get_path = format!("/repos/{}/{}/pulls/{number}", spec.owner, spec.repo);
+        let current: serde_json::Value = client
+            .get(&get_path)
+            .context("failed to fetch current PR")?
+            .json()
+            .context("failed to parse PR response")?;
+        let current_assignees: Vec<String> = current["assignees"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|a| a["login"].as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let mut new_assignees = current_assignees;
+        for a in add_assignee {
+            if !new_assignees.contains(a) {
+                new_assignees.push(a.clone());
+            }
+        }
+        new_assignees.retain(|a| !remove_assignee.contains(a));
+        body_map.insert(
+            "assignees".to_string(),
+            serde_json::Value::Array(
+                new_assignees
+                    .iter()
+                    .map(|a| serde_json::Value::String(a.clone()))
+                    .collect(),
+            ),
+        );
+    }
+
+    if body_map.is_empty() {
+        anyhow::bail!("no changes specified");
+    }
+
+    let path = format!("/repos/{}/{}/pulls/{number}", spec.owner, spec.repo);
+    let body_value = serde_json::Value::Object(body_map);
+    let response = client
+        .request("PATCH", &path, &[], Some(serde_json::to_vec(&body_value)?))
+        .context("failed to edit PR")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("pull request #{number} not found in '{spec}'");
+    }
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("edit failed");
+        anyhow::bail!("failed to edit PR #{number}: {msg}");
+    }
+
+    let pr: serde_json::Value = response.json().context("failed to parse response")?;
+    let pr_number = pr["number"].as_u64().unwrap_or(number);
+    let pr_title = pr["title"].as_str().unwrap_or("—");
+    let pr_base = pr["base"]["ref"].as_str().unwrap_or("—");
+    let pr_labels: Vec<&str> = pr["labels"]
+        .as_array()
+        .map(|arr| arr.iter().filter_map(|l| l["name"].as_str()).collect())
+        .unwrap_or_default();
+    let pr_assignees: Vec<&str> = pr["assignees"]
+        .as_array()
+        .map(|arr| arr.iter().filter_map(|a| a["login"].as_str()).collect())
+        .unwrap_or_default();
+    let pr_milestone = pr["milestone"]["title"].as_str().unwrap_or("—");
+
+    println!("✓ Updated PR #{pr_number}: {pr_title}");
+    println!("  Base:      {pr_base}");
+    println!("  Labels:    {}", pr_labels.join(", "));
+    println!("  Assignees: {}", pr_assignees.join(", "));
+    println!("  Milestone: {pr_milestone}");
+    Ok(())
+}
+
+/// Execute `gor pr review`.
+///
+/// Submits a review on a pull request with approve, request_changes,
+/// or comment state.
+///
+/// # Errors
+///
+/// Returns an error if the PR cannot be found or the API request fails.
+fn review(
+    number: u64,
+    repo: Option<&str>,
+    approve: bool,
+    request_changes: bool,
+    _comment: bool,
+    body: Option<&str>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let event = if approve {
+        "APPROVE"
+    } else if request_changes {
+        "REQUEST_CHANGES"
+    } else {
+        "COMMENT"
+    };
+
+    let mut body_map = serde_json::Map::new();
+    body_map.insert(
+        "event".to_string(),
+        serde_json::Value::String(event.to_string()),
+    );
+    if let Some(b) = body {
+        body_map.insert("body".to_string(), serde_json::Value::String(b.to_string()));
+    }
+
+    let path = format!("/repos/{}/{}/pulls/{number}/reviews", spec.owner, spec.repo);
+    let body_value = serde_json::Value::Object(body_map);
+    let response = client
+        .post(&path, &body_value)
+        .context("failed to submit review")?;
+
+    let status = response.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("pull request #{number} not found in '{spec}'");
+    }
+    if !status.is_success() {
+        let err_body: serde_json::Value = response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("review failed");
+        anyhow::bail!("failed to submit review for PR #{number}: {msg}");
+    }
+
+    let review: serde_json::Value = response.json().context("failed to parse response")?;
+    let state = review["state"].as_str().unwrap_or(event);
+    println!("✓ Submitted {state} review on PR #{number}");
+    Ok(())
+}
+
+/// Execute `gor pr checks`.
+///
+/// Shows CI check status for a pull request. Supports --watch for polling
+/// and --json for structured output.
+///
+/// # Errors
+///
+/// Returns an error if the PR cannot be found or the API request fails.
+#[allow(clippy::needless_pass_by_value)]
+fn checks(
+    number: u64,
+    repo: Option<&str>,
+    watch: bool,
+    json: Option<Vec<String>>,
+    hostname: Option<&str>,
+) -> anyhow::Result<()> {
+    let spec = match repo {
+        Some(s) => parse_repo_spec(s).context("invalid repository spec")?,
+        None => detect_remote().ok_or_else(|| {
+            anyhow::anyhow!(
+                "could not detect repository from current directory; specify OWNER/REPO"
+            )
+        })?,
+    };
+
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    // Fetch the PR to get the head SHA
+    let pr_path = format!("/repos/{}/{}/pulls/{number}", spec.owner, spec.repo);
+    let pr_resp = client.get(&pr_path).context("failed to fetch PR")?;
+    let pr_status = pr_resp.status();
+    if pr_status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("pull request #{number} not found in '{spec}'");
+    }
+    if !pr_status.is_success() {
+        anyhow::bail!("failed to fetch PR #{number}: HTTP {pr_status}");
+    }
+    let pr: serde_json::Value = pr_resp.json().context("failed to parse PR response")?;
+    let head_sha = pr["head"]["sha"].as_str().context("PR missing head SHA")?;
+
+    loop {
+        let checks_path = format!(
+            "/repos/{}/{}/commits/{head_sha}/check-runs?per_page=100",
+            spec.owner, spec.repo
+        );
+        let resp = client
+            .get(&checks_path)
+            .context("failed to fetch check runs")?;
+        let status = resp.status();
+        if !status.is_success() {
+            anyhow::bail!("failed to fetch checks: HTTP {status}");
+        }
+        let data: serde_json::Value = resp.json().context("failed to parse checks response")?;
+        let check_runs = data["check_runs"]
+            .as_array()
+            .map_or(&[] as &[serde_json::Value], |a| a);
+
+        if let Some(ref fields) = json {
+            let fields_ref: Option<&[String]> = if fields.is_empty() {
+                None
+            } else {
+                Some(fields)
+            };
+            print_json(&check_runs, fields_ref);
+            return Ok(());
+        }
+
+        if check_runs.is_empty() {
+            println!("No checks found for PR #{number}.");
+            return Ok(());
+        }
+
+        let mut passed = 0u32;
+        let mut failed = 0u32;
+        let mut pending = 0u32;
+
+        for check in check_runs {
+            let name = check["name"].as_str().unwrap_or("—");
+            let check_status = check["status"].as_str().unwrap_or("unknown");
+            let conclusion = check["conclusion"].as_str().unwrap_or("pending");
+            let details_url = check["html_url"].as_str().unwrap_or("—");
+
+            let icon = match (check_status, conclusion) {
+                ("completed", "success" | "neutral") => {
+                    passed += 1;
+                    "✓"
+                }
+                ("completed", "failure" | "timed_out" | "cancelled" | "action_required") => {
+                    failed += 1;
+                    "✗"
+                }
+                _ => {
+                    pending += 1;
+                    "○"
+                }
+            };
+
+            println!("{icon} {name:<40} {check_status:<12} {conclusion:<16} {details_url}");
+        }
+
+        println!();
+        println!("{passed} passed, {failed} failed, {pending} pending");
+
+        if !watch || pending == 0 {
+            if failed > 0 {
+                std::process::exit(1);
+            }
+            return Ok(());
+        }
+
+        std::thread::sleep(std::time::Duration::from_secs(5));
+    }
+}
+
+/// Execute `gor pr ready`.
+///
+/// Marks a draft pull request as ready for review.
+///
+/// # Errors
+///
+/// Returns an error if the PR does not exist or the API request fails.
+fn ready(number: u64, repo: Option<&str>, hostname: Option<&str>) -> anyhow::Result<()> {
+    let host = hostname.unwrap_or("github.com");
+    let client = Client::new(host).context("failed to create HTTP client")?;
+
+    let spec = if let Some(r) = repo {
+        parse_repo_spec(r).with_context(|| format!("invalid repository: {r}"))?
+    } else {
+        detect_remote().context("could not detect repository from git remote")?
+    };
+
+    let path = format!("/repos/{}/{}/pulls/{number}", spec.owner, spec.repo);
+
+    // First, fetch the PR to check if it's a draft.
+    let response = client.get(&path).context("failed to fetch PR")?;
+    let status = response.status();
+    if !status.is_success() {
+        anyhow::bail!("failed to fetch PR #{number}: HTTP {status}");
+    }
+
+    let pr: serde_json::Value = response.json().context("failed to parse PR response")?;
+    let is_draft = pr["draft"].as_bool().unwrap_or(false);
+
+    if !is_draft {
+        println!("PR #{number} is already ready for review.");
+        return Ok(());
+    }
+
+    // Mark the PR as ready by setting draft to false.
+    let body = serde_json::json!({"draft": false});
+    let body_bytes = serde_json::to_vec(&body).context("failed to serialize body")?;
+    let update_response = client
+        .request("PATCH", &path, &[], Some(body_bytes))
+        .context("failed to update PR")?;
+
+    let update_status = update_response.status();
+    if !update_status.is_success() {
+        let err_body: serde_json::Value = update_response.json().unwrap_or_default();
+        let msg = err_body["message"].as_str().unwrap_or("update failed");
+        anyhow::bail!("failed to mark PR #{number} as ready: {msg}");
+    }
+
+    println!("PR #{number} is now ready for review.");
+    Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn print_pr_table_basic() {
+        let prs = vec![json!({
+            "number": 42,
+            "title": "Fix authentication bug in login flow",
+            "state": "open",
+            "merged_at": null,
+            "user": { "login": "octocat" },
+            "head": { "ref": "fix-auth" },
+            "labels": [
+                { "name": "bug" },
+                { "name": "security" }
+            ]
+        })];
+        // Should not panic
+        print_pr_table(&prs);
+    }
+
+    #[test]
+    fn print_pr_table_merged() {
+        let prs = vec![json!({
+            "number": 100,
+            "title": "Add new feature",
+            "state": "closed",
+            "merged_at": "2024-01-15T10:30:00Z",
+            "user": { "login": "dev-user" },
+            "head": { "ref": "feature-branch" },
+            "labels": []
+        })];
+        // Should not panic; merged PR should show "merged" state
+        print_pr_table(&prs);
+    }
+
+    #[test]
+    fn print_pr_table_empty() {
+        let prs: Vec<serde_json::Value> = vec![];
+        // Should not panic
+        print_pr_table(&prs);
+    }
+
+    #[test]
+    fn print_pr_table_multiple() {
+        let prs = vec![
+            json!({
+                "number": 1,
+                "title": "First PR",
+                "state": "open",
+                "merged_at": null,
+                "user": { "login": "alice" },
+                "head": { "ref": "feature-a" },
+                "labels": [{"name": "enhancement"}]
+            }),
+            json!({
+                "number": 2,
+                "title": "Second PR with a very long title that should be truncated in the table output",
+                "state": "open",
+                "merged_at": null,
+                "user": { "login": "bob" },
+                "head": { "ref": "feature-b" },
+                "labels": [{"name": "bug"}, {"name": "docs"}]
+            }),
+        ];
+        // Should not panic
+        print_pr_table(&prs);
+    }
+
+    #[test]
+    fn print_pr_table_null_fields() {
+        let prs = vec![json!({
+            "number": 99,
+            "title": null,
+            "state": null,
+            "merged_at": null,
+            "user": null,
+            "head": null,
+            "labels": null
+        })];
+        // Should not panic with null fields
+        print_pr_table(&prs);
+    }
+
+    #[test]
+    fn open_in_browser_does_not_panic() {
+        // Just verify it doesn't panic — actual browser opening is a no-op in tests
+        open_in_browser("https://github.com/octocat/hello-world/pulls");
+    }
+
+    #[test]
+    fn print_pr_view_basic() {
+        let pr = json!({
+            "number": 42,
+            "title": "Fix authentication bug",
+            "state": "open",
+            "merged_at": null,
+            "user": { "login": "octocat" },
+            "created_at": "2024-01-15T10:30:00Z",
+            "updated_at": "2024-01-16T12:00:00Z",
+            "body": "This PR fixes the authentication bug.",
+            "base": { "ref": "main" },
+            "head": { "ref": "fix-auth", "sha": "abc123" },
+            "labels": [
+                { "name": "bug" },
+                { "name": "security" }
+            ],
+            "mergeable": true,
+            "merged_by": null
+        });
+        let reviews: Vec<serde_json::Value> = vec![];
+        let ci_status: Option<serde_json::Value> = None;
+        let comments: Vec<serde_json::Value> = vec![];
+        // Should not panic
+        print_pr_view(&pr, &reviews, ci_status.as_ref(), &comments);
+    }
+
+    #[test]
+    fn print_pr_view_merged() {
+        let pr = json!({
+            "number": 100,
+            "title": "Add new feature",
+            "state": "closed",
+            "merged_at": "2024-01-15T10:30:00Z",
+            "user": { "login": "dev-user" },
+            "created_at": "2024-01-10T08:00:00Z",
+            "updated_at": "2024-01-15T10:30:00Z",
+            "body": "This adds a new feature.",
+            "base": { "ref": "main" },
+            "head": { "ref": "feature-branch", "sha": "def456" },
+            "labels": [],
+            "mergeable": null,
+            "merged_by": { "login": "admin" }
+        });
+        let reviews: Vec<serde_json::Value> = vec![];
+        let ci_status: Option<serde_json::Value> = None;
+        let comments: Vec<serde_json::Value> = vec![];
+        // Should not panic
+        print_pr_view(&pr, &reviews, ci_status.as_ref(), &comments);
+    }
+
+    #[test]
+    fn print_pr_view_with_reviews() {
+        let pr = json!({
+            "number": 42,
+            "title": "Fix bug",
+            "state": "open",
+            "merged_at": null,
+            "user": { "login": "octocat" },
+            "created_at": "2024-01-15T10:30:00Z",
+            "updated_at": "2024-01-16T12:00:00Z",
+            "body": "Fixes a bug.",
+            "base": { "ref": "main" },
+            "head": { "ref": "fix-bug", "sha": "abc123" },
+            "labels": [],
+            "mergeable": true,
+            "merged_by": null
+        });
+        let reviews = vec![
+            json!({
+                "user": { "login": "reviewer1" },
+                "state": "APPROVED"
+            }),
+            json!({
+                "user": { "login": "reviewer2" },
+                "state": "CHANGES_REQUESTED"
+            }),
+            json!({
+                "user": { "login": "reviewer3" },
+                "state": "COMMENTED"
+            }),
+        ];
+        let ci_status: Option<serde_json::Value> = None;
+        let comments: Vec<serde_json::Value> = vec![];
+        // Should not panic
+        print_pr_view(&pr, &reviews, ci_status.as_ref(), &comments);
+    }
+
+    #[test]
+    fn print_pr_view_with_ci() {
+        let pr = json!({
+            "number": 42,
+            "title": "Fix bug",
+            "state": "open",
+            "merged_at": null,
+            "user": { "login": "octocat" },
+            "created_at": "2024-01-15T10:30:00Z",
+            "updated_at": "2024-01-16T12:00:00Z",
+            "body": "Fixes a bug.",
+            "base": { "ref": "main" },
+            "head": { "ref": "fix-bug", "sha": "abc123" },
+            "labels": [],
+            "mergeable": true,
+            "merged_by": null
+        });
+        let reviews: Vec<serde_json::Value> = vec![];
+        let ci_status = Some(json!({
+            "statuses": [
+                { "context": "CI / test", "state": "success" },
+                { "context": "CI / lint", "state": "failure" },
+                { "context": "CI / build", "state": "pending" }
+            ]
+        }));
+        let comments: Vec<serde_json::Value> = vec![];
+        // Should not panic
+        print_pr_view(&pr, &reviews, ci_status.as_ref(), &comments);
+    }
+
+    #[test]
+    fn print_pr_view_with_comments() {
+        let pr = json!({
+            "number": 42,
+            "title": "Fix bug",
+            "state": "open",
+            "merged_at": null,
+            "user": { "login": "octocat" },
+            "created_at": "2024-01-15T10:30:00Z",
+            "updated_at": "2024-01-16T12:00:00Z",
+            "body": "Fixes a bug.",
+            "base": { "ref": "main" },
+            "head": { "ref": "fix-bug", "sha": "abc123" },
+            "labels": [],
+            "mergeable": true,
+            "merged_by": null
+        });
+        let reviews: Vec<serde_json::Value> = vec![];
+        let ci_status: Option<serde_json::Value> = None;
+        let comments = vec![
+            json!({
+                "user": { "login": "reviewer1" },
+                "created_at": "2024-01-16T14:00:00Z",
+                "body": "Looks good to me!"
+            }),
+            json!({
+                "user": { "login": "octocat" },
+                "created_at": "2024-01-16T15:00:00Z",
+                "body": "Thanks for the review!"
+            }),
+        ];
+        // Should not panic
+        print_pr_view(&pr, &reviews, ci_status.as_ref(), &comments);
+    }
+
+    #[test]
+    fn print_pr_view_null_fields() {
+        let pr = json!({
+            "number": 99,
+            "title": null,
+            "state": null,
+            "merged_at": null,
+            "user": null,
+            "created_at": null,
+            "updated_at": null,
+            "body": null,
+            "base": null,
+            "head": null,
+            "labels": null,
+            "mergeable": null,
+            "merged_by": null
+        });
+        let reviews: Vec<serde_json::Value> = vec![];
+        let ci_status: Option<serde_json::Value> = None;
+        let comments: Vec<serde_json::Value> = vec![];
+        // Should not panic with null fields
+        print_pr_view(&pr, &reviews, ci_status.as_ref(), &comments);
+    }
+
+    #[test]
+    fn print_review_status_empty() {
+        let reviews: Vec<serde_json::Value> = vec![];
+        // Should not panic
+        print_review_status(&reviews);
+    }
+
+    #[test]
+    fn print_review_status_with_reviews() {
+        let reviews = vec![
+            json!({
+                "user": { "login": "alice" },
+                "state": "APPROVED"
+            }),
+            json!({
+                "user": { "login": "bob" },
+                "state": "CHANGES_REQUESTED"
+            }),
+            json!({
+                "user": { "login": "carol" },
+                "state": "COMMENTED"
+            }),
+        ];
+        // Should not panic
+        print_review_status(&reviews);
+    }
+
+    #[test]
+    fn print_merge_status_mergeable() {
+        let pr = json!({
+            "mergeable": true,
+            "merged_at": null,
+            "merged_by": null
+        });
+        // Should not panic
+        print_merge_status(&pr);
+    }
+
+    #[test]
+    fn print_merge_status_conflicts() {
+        let pr = json!({
+            "mergeable": false,
+            "merged_at": null,
+            "merged_by": null
+        });
+        // Should not panic
+        print_merge_status(&pr);
+    }
+
+    #[test]
+    fn print_merge_status_merged() {
+        let pr = json!({
+            "mergeable": null,
+            "merged_at": "2024-01-15T10:30:00Z",
+            "merged_by": { "login": "admin" }
+        });
+        // Should not panic
+        print_merge_status(&pr);
+    }
+
+    #[test]
+    fn print_ci_status_empty() {
+        let ci_status: Option<serde_json::Value> = None;
+        // Should not panic
+        print_ci_status(ci_status.as_ref());
+    }
+
+    #[test]
+    fn print_ci_status_with_checks() {
+        let ci_status = Some(json!({
+            "statuses": [
+                { "context": "CI / test", "state": "success" },
+                { "context": "CI / lint", "state": "failure" },
+                { "context": "CI / build", "state": "pending" }
+            ]
+        }));
+        // Should not panic
+        print_ci_status(ci_status.as_ref());
+    }
+}
