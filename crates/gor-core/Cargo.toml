@@ -1,0 +1,33 @@
+[package]
+name = "gor-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Core library for the gor GitHub CLI — typed operations and models"
+readme = "README.md"
+keywords = ["github", "api", "gh", "git"]
+categories = ["api-bindings", "web-programming::http-client"]
+
+[lib]
+name = "gor_core"
+
+[lints]
+workspace = true
+
+[features]
+default = []
+keyring = ["dep:keyring"]
+
+[dependencies]
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml_ng = { workspace = true }
+thiserror = { workspace = true }
+dirs = { workspace = true }
+gix = { workspace = true }
+tracing = { workspace = true }
+keyring = { workspace = true, optional = true }

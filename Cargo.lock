@@ -1517,16 +1517,30 @@ dependencies = [
  "console",
  "dirs",
  "gix",
+ "gor-core",
  "indicatif",
- "keyring",
  "miette",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "serde_yaml_ng",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "gor-core"
+version = "0.1.0"
+dependencies = [
+ "dirs",
+ "gix",
+ "keyring",
  "reqwest 0.12.28",
  "serde",
  "serde_json",
  "serde_yaml_ng",
  "thiserror 2.0.18",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
