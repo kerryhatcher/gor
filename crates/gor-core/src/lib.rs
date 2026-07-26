@@ -16,12 +16,15 @@ pub mod keyring_store;
 pub mod repository;
 
 pub mod cache;
+pub mod keys;
 pub mod label;
 pub mod org;
 pub mod project;
+pub mod search;
 pub mod secret;
 pub mod util;
 pub mod variable;
+pub mod workflow;
 
 /// Convenience re-exports of key types.
 pub use client::Client;

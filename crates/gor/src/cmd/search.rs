@@ -1,14 +1,16 @@
 //! Implementation of the `gor search` subcommand.
-//!
-//! Provides search functionality for repositories, code, issues, and commits.
 
-#![allow(clippy::print_stdout)]
+#![allow(
+    clippy::print_stdout,
+    clippy::too_many_arguments,
+    clippy::format_push_string
+)]
 
 use crate::cli::SearchCommand;
-use crate::render::{format_count, format_date, print_json};
-use anyhow::Context;
-use gor_core::client::Client;
-use std::fmt::Write as FmtWrite;
+use crate::cmd::util::truncate;
+use crate::render::{format_date, print_json};
+use gor_core::Client;
+use gor_core::search;
 
 /// Run the `gor search` subcommand.
 ///
@@ -96,19 +98,15 @@ pub fn run(cmd: SearchCommand) -> anyhow::Result<()> {
     }
 }
 
-fn build_query(base: &str, qualifiers: &[(&str, &str)]) -> String {
-    let mut q = base.to_string();
-    for (key, value) in qualifiers {
-        let _ = write!(q, " {key}:{value}");
-    }
-    q
+fn client(hostname: Option<&str>) -> anyhow::Result<Client> {
+    let host = hostname.unwrap_or("github.com");
+    Client::new(host).map_err(|e| anyhow::anyhow!("{e}"))
 }
 
-#[allow(clippy::too_many_arguments)]
 fn search_repos(
     query: &str,
     language: Option<&str>,
-    _topic: Option<&str>,
+    topic: Option<&str>,
     stars: Option<&str>,
     sort: &str,
     order: &str,
@@ -117,75 +115,46 @@ fn search_repos(
     web: bool,
     hostname: Option<&str>,
 ) -> anyhow::Result<()> {
-    let host = hostname.unwrap_or("github.com");
-
-    if web {
-        let encoded = urlencoding(query);
-        let web_url = format!("https://{host}/search?q={encoded}&type=repositories");
-        open_in_browser(&web_url);
-        return Ok(());
-    }
-
-    let client = Client::new(host).context("failed to create HTTP client")?;
-
-    let mut qualifiers: Vec<(&str, &str)> = Vec::new();
+    let c = client(hostname)?;
+    let mut q = query.to_string();
     if let Some(l) = language {
-        qualifiers.push(("language", l));
+        q.push_str(&format!("+language:{l}"));
+    }
+    if let Some(t) = topic {
+        q.push_str(&format!("+topic:{t}"));
     }
     if let Some(s) = stars {
-        qualifiers.push(("stars", s));
+        q.push_str(&format!("+stars:{s}"));
     }
-    let q = build_query(query, &qualifiers);
-
-    let path = format!(
-        "/search/repositories?q={}&sort={sort}&order={order}&per_page={}",
-        urlencoding(&q),
-        limit.min(100)
-    );
-    let response = client.get(&path).context("failed to search repositories")?;
-    let status = response.status();
-    if !status.is_success() {
-        anyhow::bail!("search failed: HTTP {status}");
+    if web {
+        let url = format!("https://github.com/search?q={}", q.replace('+', "%20"));
+        println!("Open {url} in your browser");
+        return Ok(());
     }
-
-    let data: serde_json::Value = response.json().context("failed to parse search response")?;
-    let items: Vec<serde_json::Value> = data["items"].as_array().cloned().unwrap_or_default();
-
+    let items = search::search_repos(&c, &q, sort, order, limit)?;
     if let Some(fields) = json {
-        let fields_ref: Option<&[String]> = if fields.is_empty() {
+        let fields_ref = if fields.is_empty() {
             None
         } else {
-            Some(&fields)
+            Some(fields.as_slice())
         };
         print_json(&items, fields_ref);
         return Ok(());
     }
-
     if items.is_empty() {
         println!("No repositories found.");
         return Ok(());
     }
-
     println!(
-        "{:<40}  {:<50}  {:<8}  {:<12}  {:<16}",
-        "NAME", "DESCRIPTION", "STARS", "LANGUAGE", "UPDATED"
+        "{:<40}  {:<10}  {:<10}  DESCRIPTION",
+        "NAME", "STARS", "UPDATED"
     );
-    for item in &items {
-        let full_name = item["full_name"].as_str().unwrap_or("—");
-        let desc = item["description"].as_str().unwrap_or("—");
-        let stars_count = item["stargazers_count"].as_u64().unwrap_or(0);
-        let lang = item["language"].as_str().unwrap_or("—");
-        let updated = item["updated_at"]
-            .as_str()
-            .map_or_else(|| "—".to_string(), format_date);
-
-        let name_truncated = crate::cmd::util::truncate(full_name, 40);
-        let desc_truncated = crate::cmd::util::truncate(desc, 50);
-
-        println!(
-            "{name_truncated:<40}  {desc_truncated:<50}  {:<8}  {lang:<12}  {updated:<16}",
-            format_count(stars_count)
-        );
+    for r in &items {
+        let name = r["full_name"].as_str().unwrap_or("—");
+        let stars = r["stargazers_count"].as_u64().unwrap_or(0);
+        let updated = format_date(r["updated_at"].as_str().unwrap_or(""));
+        let desc = truncate(r["description"].as_str().unwrap_or("—"), 50);
+        println!("{name:<40}  {stars:<10}  {updated:<10}  {desc}");
     }
     Ok(())
 }
@@ -199,66 +168,40 @@ fn search_code(
     web: bool,
     hostname: Option<&str>,
 ) -> anyhow::Result<()> {
-    let host = hostname.unwrap_or("github.com");
-
-    if web {
-        let encoded = urlencoding(query);
-        let web_url = format!("https://{host}/search?q={encoded}&type=code");
-        open_in_browser(&web_url);
-        return Ok(());
-    }
-
-    let client = Client::new(host).context("failed to create HTTP client")?;
-
-    let mut qualifiers: Vec<(&str, &str)> = Vec::new();
+    let c = client(hostname)?;
+    let mut q = query.to_string();
     if let Some(l) = language {
-        qualifiers.push(("language", l));
+        q.push_str(&format!("+language:{l}"));
     }
     if let Some(r) = repo {
-        qualifiers.push(("repo", r));
+        q.push_str(&format!("+repo:{r}"));
     }
-    let q = build_query(query, &qualifiers);
-
-    let path = format!(
-        "/search/code?q={}&per_page={}",
-        urlencoding(&q),
-        limit.min(100)
-    );
-    let response = client.get(&path).context("failed to search code")?;
-    let status = response.status();
-    if !status.is_success() {
-        anyhow::bail!("search failed: HTTP {status}");
+    if web {
+        let url = format!(
+            "https://github.com/search?type=code&q={}",
+            q.replace('+', "%20")
+        );
+        println!("Open {url} in your browser");
+        return Ok(());
     }
-
-    let data: serde_json::Value = response.json().context("failed to parse search response")?;
-    let items: Vec<serde_json::Value> = data["items"].as_array().cloned().unwrap_or_default();
-
+    let items = search::search_code(&c, &q, limit)?;
     if let Some(fields) = json {
-        let fields_ref: Option<&[String]> = if fields.is_empty() {
+        let fields_ref = if fields.is_empty() {
             None
         } else {
-            Some(&fields)
+            Some(fields.as_slice())
         };
         print_json(&items, fields_ref);
         return Ok(());
     }
-
-    if items.is_empty() {
-        println!("No code results found.");
-        return Ok(());
-    }
-
     for item in &items {
-        let repo_name = item["repository"]["full_name"].as_str().unwrap_or("—");
         let path = item["path"].as_str().unwrap_or("—");
-        let html_url = item["html_url"].as_str().unwrap_or("—");
-        println!("{repo_name}/{path}");
-        println!("  {html_url}");
+        let repo_name = item["repository"]["full_name"].as_str().unwrap_or("—");
+        println!("{repo_name} {path}");
     }
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
 fn search_issues(
     query: &str,
     r#type: Option<&str>,
@@ -269,65 +212,46 @@ fn search_issues(
     web: bool,
     hostname: Option<&str>,
 ) -> anyhow::Result<()> {
-    let host = hostname.unwrap_or("github.com");
-
-    if web {
-        let encoded = urlencoding(query);
-        let web_url = format!("https://{host}/search?q={encoded}&type=issues");
-        open_in_browser(&web_url);
-        return Ok(());
-    }
-
-    let client = Client::new(host).context("failed to create HTTP client")?;
-
-    let mut qualifiers: Vec<(&str, &str)> = Vec::new();
+    let c = client(hostname)?;
+    let mut q = query.to_string();
     if let Some(t) = r#type {
-        qualifiers.push(("type", t));
+        q.push_str(&format!("+type:{t}"));
     }
     if let Some(s) = state {
-        qualifiers.push(("state", s));
+        q.push_str(&format!("+state:{s}"));
     }
     if let Some(l) = labels {
-        qualifiers.push(("label", l));
+        q.push_str(&format!("+label:{l}"));
     }
-    let q = build_query(query, &qualifiers);
-
-    let path = format!(
-        "/search/issues?q={}&per_page={}",
-        urlencoding(&q),
-        limit.min(100)
-    );
-    let response = client.get(&path).context("failed to search issues")?;
-    let status = response.status();
-    if !status.is_success() {
-        anyhow::bail!("search failed: HTTP {status}");
+    if web {
+        let url = format!("https://github.com/issues?q={}", q.replace('+', "%20"));
+        println!("Open {url} in your browser");
+        return Ok(());
     }
-
-    let data: serde_json::Value = response.json().context("failed to parse search response")?;
-    let items: Vec<serde_json::Value> = data["items"].as_array().cloned().unwrap_or_default();
-
+    let items = search::search_issues(&c, &q, limit)?;
     if let Some(fields) = json {
-        let fields_ref: Option<&[String]> = if fields.is_empty() {
+        let fields_ref = if fields.is_empty() {
             None
         } else {
-            Some(&fields)
+            Some(fields.as_slice())
         };
         print_json(&items, fields_ref);
         return Ok(());
     }
-
     if items.is_empty() {
         println!("No issues found.");
         return Ok(());
     }
-
-    for item in &items {
-        let number = item["number"].as_u64().unwrap_or(0);
-        let title = item["title"].as_str().unwrap_or("—");
-        let state_str = item["state"].as_str().unwrap_or("—");
-        let html_url = item["html_url"].as_str().unwrap_or("—");
-        println!("#{number} [{state_str}] {title}");
-        println!("  {html_url}");
+    println!("{:<40}  {:<15}  TITLE", "ISSUE", "STATE");
+    for i in &items {
+        let repo = i["repository_url"]
+            .as_str()
+            .and_then(|u| u.rsplit('/').nth(1))
+            .unwrap_or("—");
+        let num = i["number"].as_u64().unwrap_or(0);
+        let state = i["state"].as_str().unwrap_or("—");
+        let title = truncate(i["title"].as_str().unwrap_or("—"), 50);
+        println!("{repo}/#{num:<8}  {state:<15}  {title}");
     }
     Ok(())
 }
@@ -341,88 +265,43 @@ fn search_commits(
     web: bool,
     hostname: Option<&str>,
 ) -> anyhow::Result<()> {
-    let host = hostname.unwrap_or("github.com");
-
-    if web {
-        let encoded = urlencoding(query);
-        let web_url = format!("https://{host}/search?q={encoded}&type=commits");
-        open_in_browser(&web_url);
-        return Ok(());
-    }
-
-    let client = Client::new(host).context("failed to create HTTP client")?;
-
-    let mut qualifiers: Vec<(&str, &str)> = Vec::new();
+    let c = client(hostname)?;
+    let mut q = query.to_string();
     if let Some(a) = author {
-        qualifiers.push(("author", a));
+        q.push_str(&format!("+author:{a}"));
     }
     if let Some(r) = repo {
-        qualifiers.push(("repo", r));
+        q.push_str(&format!("+repo:{r}"));
     }
-    let q = build_query(query, &qualifiers);
-
-    let path = format!(
-        "/search/commits?q={}&per_page={}",
-        urlencoding(&q),
-        limit.min(100)
-    );
-    let response = client.get(&path).context("failed to search commits")?;
-    let status = response.status();
-    if !status.is_success() {
-        anyhow::bail!("search failed: HTTP {status}");
+    if web {
+        let url = format!(
+            "https://github.com/search?type=commits&q={}",
+            q.replace('+', "%20")
+        );
+        println!("Open {url} in your browser");
+        return Ok(());
     }
-
-    let data: serde_json::Value = response.json().context("failed to parse search response")?;
-    let items: Vec<serde_json::Value> = data["items"].as_array().cloned().unwrap_or_default();
-
+    let items = search::search_commits(&c, &q, limit)?;
     if let Some(fields) = json {
-        let fields_ref: Option<&[String]> = if fields.is_empty() {
+        let fields_ref = if fields.is_empty() {
             None
         } else {
-            Some(&fields)
+            Some(fields.as_slice())
         };
         print_json(&items, fields_ref);
         return Ok(());
     }
-
-    if items.is_empty() {
-        println!("No commits found.");
-        return Ok(());
-    }
-
     for item in &items {
-        let sha = item["sha"].as_str().unwrap_or("—");
-        let short_sha = &sha[..sha.len().min(7)];
-        let message = item["commit"]["message"].as_str().unwrap_or("—");
-        let first_line = message.lines().next().unwrap_or("—");
-        let author_login = item["author"]["login"].as_str().unwrap_or("—");
-        let html_url = item["html_url"].as_str().unwrap_or("—");
-        println!("{short_sha} {first_line}");
-        println!("  {author_login} — {html_url}");
+        let sha = item["sha"]
+            .as_str()
+            .unwrap_or("—")
+            .chars()
+            .take(7)
+            .collect::<String>();
+        let msg = truncate(item["commit"]["message"].as_str().unwrap_or("—"), 80);
+        let author = item["commit"]["author"]["name"].as_str().unwrap_or("—");
+        let date = format_date(item["commit"]["author"]["date"].as_str().unwrap_or(""));
+        println!("{sha} {author:<20} {date:<10} {msg}");
     }
     Ok(())
-}
-
-fn urlencoding(s: &str) -> String {
-    s.replace(' ', "+")
-        .replace('#', "%23")
-        .replace('&', "%26")
-        .replace('?', "%3F")
-}
-
-fn open_in_browser(url: &str) {
-    #[cfg(target_os = "linux")]
-    {
-        let _ = std::process::Command::new("xdg-open").arg(url).spawn();
-    }
-    #[cfg(target_os = "macos")]
-    {
-        let _ = std::process::Command::new("open").arg(url).spawn();
-    }
-    #[cfg(target_os = "windows")]
-    {
-        let _ = std::process::Command::new("cmd")
-            .args(["/c", "start", url])
-            .spawn();
-    }
 }
