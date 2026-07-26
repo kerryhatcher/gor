@@ -321,7 +321,7 @@ gor as an installable plugin.
 
 ### Plugin structure
 
-```
+```text
 .plugin/plugin.json       # Manifest: name, version, metadata
 commands/*.md             # Command files teaching agents how to use gor
 ```

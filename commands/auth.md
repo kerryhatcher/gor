@@ -1,5 +1,5 @@
 ---
-description: Authenticate with GitHub — login, logout, status, and token management
+description: Authenticate with GitHub — login, logout, status, token, and git credential setup
 ---
 
 # GitHub Authentication via gor
@@ -39,10 +39,26 @@ gor auth logout
 
 ## View token
 
-Print the current token for debugging:
+Print the current token. Use `--secure` to mask the output (shows only first
+and last few characters):
 
 ```bash
 gor auth token
+gor auth token --secure
+```
+
+> **Warning:** Tokens grant full API access. Never expose them in logs,
+> terminal history, screenshots, or agent output. Use `--secure` whenever
+> possible to reduce accidental disclosure.
+
+## Configure git credential helper
+
+Set up git to use `gor` as a credential helper (so git commands authenticate
+via your stored token):
+
+```bash
+gor auth setup-git
+gor auth setup-git --hostname github.mycompany.com
 ```
 
 ## Environment variables

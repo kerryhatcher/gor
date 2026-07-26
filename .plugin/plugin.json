@@ -1,6 +1,6 @@
 {
   "name": "gor",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "GitHub CLI — manage PRs, issues, repos, CI, releases, search, codespaces, and more via the GitHub API",
   "author": {
     "name": "kerryhatcher"
