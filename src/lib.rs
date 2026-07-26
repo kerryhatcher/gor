@@ -38,6 +38,7 @@ pub mod host;
 pub mod keyring_store;
 pub mod output;
 pub mod repository;
+pub mod vcs;
 
 use clap::Parser;
 use cli::Args;
