@@ -21,11 +21,11 @@ gor workflow disable .github/workflows/ci.yml -R owner/repo
 
 ```bash
 gor run list -R owner/repo
-gor run list -R owner/repo --status failure --branch main
+gor run list -R owner/repo --branch main --workflow ci.yml
 gor run view 1234567890 -R owner/repo
 gor run watch 1234567890 -R owner/repo
 gor run cancel 1234567890 -R owner/repo
-gor run rerun 1234567890 -R owner/repo --failed
+gor run rerun 1234567890 -R owner/repo --failed-jobs
 gor run download 1234567890 -R owner/repo --dir ./artifacts
 ```
 
@@ -34,5 +34,10 @@ gor run download 1234567890 -R owner/repo --dir ./artifacts
 ```bash
 gor cache list -R owner/repo
 gor cache list -R owner/repo --json key,size_in_bytes,ref
-gor cache delete --key "node-modules-" -R owner/repo
+
+# Delete by exact key
+gor cache delete --key "node-linux-pnpm-" -R owner/repo
+
+# Delete all caches
+gor cache delete --all -R owner/repo
 ```

@@ -46,9 +46,8 @@ gor issue pin 123 -R owner/repo
 gor issue unpin 123 -R owner/repo
 ```
 
-## Transfer and delete
+## Transfer to another repository
 
 ```bash
-gor issue transfer 123 -R owner/repo --target-repo target-owner/target-repo
-gor issue delete 123 -R owner/repo
+gor issue transfer 123 -R owner/repo target-owner/target-repo
 ```

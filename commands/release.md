@@ -31,7 +31,7 @@ gor release create v1.0.0 -R owner/repo --notes-file CHANGELOG.md --prerelease
 
 ```bash
 gor release upload v1.0.0 -R owner/repo ./binary.tar.gz
-gor release upload v1.0.0 -R owner/repo ./binary.tar.gz --label "Linux binary"
+gor release upload v1.0.0 -R owner/repo ./binary.tar.gz --name "linux-amd64.tar.gz"
 
 gor release download v1.0.0 -R owner/repo --dir ./downloads
 ```

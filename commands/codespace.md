@@ -7,17 +7,20 @@ description: Manage GitHub Codespaces — list, create, stop, delete, and SSH
 Use the `gor` CLI to manage GitHub Codespaces.
 
 ```bash
+# List
 gor codespace list
 gor codespace list --json name,repository,state,branch
 
-gor codespace create -R owner/repo
-gor codespace create -R owner/repo --branch feature-branch
+# Create
+gor codespace create owner/repo
+gor codespace create owner/repo --branch feature-branch
 
-gor codespace ssh
-gor codespace ssh --codespace my-codespace-name
+# SSH (positional: codespace name)
+gor codespace ssh my-codespace-name
 
-gor codespace stop --codespace my-codespace-name
+# Stop (positional: codespace name)
+gor codespace stop my-codespace-name
 
-gor codespace delete --codespace my-codespace-name
-gor codespace delete --all
+# Delete (positional: codespace name, use --yes to skip prompt)
+gor codespace delete my-codespace-name --yes
 ```

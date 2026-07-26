@@ -1,5 +1,5 @@
 ---
-description: Manage GitHub repositories — view, list, create, fork, clone, edit, and delete
+description: Manage GitHub repositories — view, list, create, fork, clone, and edit
 ---
 
 # Repository Management via gor
@@ -23,8 +23,11 @@ gor repo list --type fork --sort updated
 
 ## Create a repository
 
+Default visibility is public; use `--private` for private repos:
+
 ```bash
-gor repo create my-new-repo --description "A great project" --public
+gor repo create my-new-repo --description "A great project"
+gor repo create private-repo --description "Internal tool" --private
 ```
 
 ## Fork a repository
@@ -38,15 +41,18 @@ gor repo fork owner/repo --org my-org
 
 ```bash
 gor repo clone owner/repo
-gor repo clone owner/repo --target ./my-dir
+gor repo clone owner/repo --directory ./my-dir
 ```
 
 ## Other operations
 
 ```bash
-gor repo edit owner/repo --description "New description"
-gor repo archive owner/repo
-gor repo rename owner/repo new-name
+# Edit repo settings (use -R for target)
+gor repo edit -R owner/repo --description "New description" --visibility private
+
+# Delete
 gor repo delete owner/repo
+
+# Sync a fork with its upstream
 gor repo sync
 ```

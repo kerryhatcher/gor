@@ -14,5 +14,6 @@ gor label create bug -R owner/repo --color d73a4a --description "Bug report"
 gor label edit bug -R owner/repo --name bug --color d73a4a
 gor label delete bug -R owner/repo
 
-gor label clone -R source/repo --target target/repo
+# Clone labels: source is positional, target via -R
+gor label clone source-owner/source-repo -R target-owner/target-repo
 ```

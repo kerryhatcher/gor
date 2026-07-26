@@ -6,20 +6,20 @@ description: Manage secrets, variables, SSH keys, and GPG keys
 
 Use the `gor` CLI to manage secrets, variables, SSH keys, and GPG keys.
 
-## Secrets
+## Secrets (org- or environment-scoped)
 
 ```bash
-gor secret list -R owner/repo
-gor secret set MY_SECRET -R owner/repo
-gor secret delete MY_SECRET -R owner/repo
+gor secret list --org my-org
+gor secret set MY_SECRET --body "value-here" --org my-org
+gor secret delete MY_SECRET --org my-org
 ```
 
-## Variables
+## Variables (org- or environment-scoped)
 
 ```bash
-gor variable list -R owner/repo
-gor variable set MY_VAR -R owner/repo
-gor variable delete MY_VAR -R owner/repo
+gor variable list --org my-org
+gor variable set MY_VAR --body "value-here" --org my-org
+gor variable delete MY_VAR --org my-org
 ```
 
 ## SSH keys
@@ -34,6 +34,6 @@ gor ssh-key delete KEY_ID
 
 ```bash
 gor gpg-key list
-gor gpg-key add ~/.gnupg/pubkey.asc
+gor gpg-key add --file ~/.gnupg/pubkey.asc
 gor gpg-key delete KEY_ID
 ```
