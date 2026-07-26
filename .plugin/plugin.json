@@ -1,0 +1,12 @@
+{
+  "name": "gor",
+  "version": "1.0.0",
+  "description": "GitHub CLI — manage PRs, issues, repos, CI, releases, search, codespaces, and more via the GitHub API",
+  "author": {
+    "name": "kerryhatcher"
+  },
+  "repository": "https://github.com/kerryhatcher/gor",
+  "homepage": "https://github.com/kerryhatcher/gor",
+  "license": "MIT OR Apache-2.0",
+  "keywords": ["github", "cli", "git", "pr", "issues", "ci", "devops"]
+}

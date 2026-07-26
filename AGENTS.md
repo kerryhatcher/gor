@@ -310,3 +310,46 @@ Always create a story file before implementing a new command or subcommand.
 - `docs/research/research-architecture.md` — Crate ecosystem and architecture patterns
 - `docs/research/research-docs.md` — Documentation best practices
 - `docs/research/research-deployment.md` — Distribution and release automation
+
+---
+
+## Open Plugins Integration
+
+gor bundles an [Open Plugins](https://open-plugins.com/) v1.0.0 plugin manifest
+and command files, so CherryPi and other conformant agent tools can discover
+gor as an installable plugin.
+
+### Plugin structure
+
+```text
+.plugin/plugin.json       # Manifest: name, version, metadata
+commands/*.md             # Command files teaching agents how to use gor
+```
+
+Each `.md` file in `commands/` is loaded as a namespaced command available
+at `/gor:<name>` (e.g. `/gor:pr`, `/gor:repo`).
+
+### Installing the plugin
+
+Any conformant agent tool that scans Open Plugins directories will discover
+gor automatically when the repo root or a symlink is in the search path:
+
+```bash
+ln -s /path/to/gor ~/.local/share/cherrypi/plugins/gor
+```
+
+Or install via cargo and copy the plugin directory:
+
+```bash
+cargo install gor-cli
+cp -r .plugin commands ~/.local/share/cherrypi/plugins/gor/
+```
+
+### Key principles
+
+- The manifest (`name: "gor"`) namespaces all commands as `gor:<name>`.
+- Command files are documentation-first: they teach the AI how to invoke `gor`
+  with the right flags and `--json` output.
+- Changes to the CLI surface (new subcommands, changed flags) should be
+  reflected in the corresponding command file.
+- Adding a new command group? Create a matching `commands/<group>.md`.
