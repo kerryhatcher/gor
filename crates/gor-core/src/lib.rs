@@ -18,7 +18,9 @@ pub mod repository;
 pub mod cache;
 pub mod label;
 pub mod org;
+pub mod secret;
 pub mod util;
+pub mod variable;
 
 /// Convenience re-exports of key types.
 pub use client::Client;
