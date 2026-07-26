@@ -78,8 +78,7 @@ impl GitRepo {
         self.repo
             .head()
             .ok()
-            .map(|head| head.name().as_bstr().to_string())
-            .filter(|s| !s.is_empty())
+            .and_then(|head| head.referent_name().map(|name| name.shorten().to_string()))
             .unwrap_or_default()
     }
 
@@ -101,7 +100,7 @@ impl GitRepo {
                 gix::remote::Direction::Fetch,
             )
             .and_then(Result::ok)
-            .map(|cow| cow.to_string());
+            .map(|cow| cow.shorten().to_string());
 
         // Ahead/behind requires commit walking; simplified to (0, 0) for now.
         (upstream, 0, 0)
@@ -182,11 +181,9 @@ impl GitRepo {
                             status: ChangeType::Added,
                         });
                     }
-                    EntryStatus::Conflict { .. } => {
-                        untracked.push(path);
-                    }
-                    EntryStatus::NeedsUpdate(_) => {
-                        // Stat cache refresh, no user-visible change
+                    EntryStatus::Conflict { .. } | EntryStatus::NeedsUpdate(_) => {
+                        // Conflicts reported via get_conflicted_files();
+                        // stat updates are cache-internal.
                     }
                 }
             }
@@ -218,11 +215,13 @@ impl GitRepo {
             .map_err(|e| VcsError::Other(format!("failed to open index: {e}")))?;
         let state: &gix::index::State = &index;
         let entries = state.entries();
-        let conflicted: Vec<String> = entries
+        let mut conflicted: Vec<String> = entries
             .iter()
             .filter(|e| e.stage() != Stage::Unconflicted)
             .map(|e| e.path(state).to_string())
             .collect();
+        conflicted.sort();
+        conflicted.dedup();
         Ok(conflicted)
     }
 }

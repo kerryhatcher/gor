@@ -182,12 +182,14 @@ gix = { version = "0.85", default-features = false, features = [
   should always be available.
 - **`gix::discover()` over `gix::open()`.** Walk up for `.git/` so `gor
   status` works from any subdirectory, just like `git status`.
-- **Single `gix::Status` pass.** gix collects staged, unstaged, untracked,
-  and ignored in one directory walk. Don't reconstruct it with separate
+- **Single `gix::status` platform pass.** Use `repo.status(Discard)` to
+  obtain a `Platform`, then consume it via `into_iter()`. The iterator
+  yields `Item::TreeIndex` (staged) and `Item::IndexWorktree` (unstaged +
+  untracked) in one pass. Don't try to reconstruct status with separate
   API calls.
-- **Index-based, not snapshot-based.** `gix::Status` uses lstat to check
-  file modification times against the index, skipping unchanged files.
-  No full tree walk unless something changed.
+- **Index-based, not snapshot-based.** The status platform uses lstat to
+  check file modification times against the index, skipping unchanged
+  files. No full tree walk unless something changed.
 - **Rename detection off by default.** `gix::diff::DetectRenames` is
   opt-in via `--renames` for performance.
 
@@ -195,13 +197,17 @@ gix = { version = "0.85", default-features = false, features = [
 
 - `gix::discover()` respects `$GIT_DIR` and `$GIT_DISCOVERY_ACROSS_FILESYSTEM`.
   Test edge cases with environment variables.
+- **No `staged()/unstaged()/untracked()` accessors.** gix 0.85's status
+  API is iterator-based. Consume via `Platform::into_iter()` and classify
+  each `Item` by variant.
 - `gix::Status` returns paths relative to the working tree root, not the
   current directory. Normalize for display (like `git status` does).
 - Stat-caching means `gix` may miss files touched by external tools if
   mtime isn't updated. Falls back to content comparison.
 - `gix` 0.85 is still pre-1.0. Pin the exact version (already done).
-- Conflicted files come from `gix::Index::entries()` with `stage() > 0`,
-  not from `gix::Status`. Need a separate index read.
+- Conflicted files come from `gix::Index::entries()` with
+  `stage() != Stage::Unconflicted`, not from the status iterator.
+  Deduplicate via sort + dedup since multiple stages exist per path.
 
 ## First Steps for the Agent
 

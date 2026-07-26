@@ -153,44 +153,59 @@ None of these require rebase, cherry-pick, or a change-based model.
 ## gix API Quick Reference for status
 
 ```rust
-use gix::{Repository, Status};
+use gix::bstr::BString;
 
 // Open the repo
 let repo = gix::discover(".")?;
 
-// Get working tree status
-let status = repo.status(gix::worktree::Status::default())?;
-
-// Branch info
+// Branch info via Head::referent_name()
 let head = repo.head()?;
-let branch_name = head.name().map(|n| n.as_bstr().to_string());
+let branch_name: String = head
+    .referent_name()
+    .map(|n| n.shorten().to_string())
+    .unwrap_or_default();
+
+// Upstream tracking via config
+let branch_ref = format!("refs/heads/{branch_name}");
 let upstream = repo
-    .find_reference(branch_name)?
-    .into_fully_peeled_id()?
-    .object()?
-    .into_commit();
+    .find_reference(&branch_ref)
+    .ok()
+    .and_then(|r| {
+        repo.branch_remote_tracking_ref_name(
+            r.inner.name.as_ref(),
+            gix::remote::Direction::Fetch,
+        )
+        .and_then(Result::ok)
+        .map(|cow| cow.shorten().to_string())
+    });
 
-// Ahead/behind
-let graph = repo.graph()?;
-let (ahead, behind) = graph.ahead_behind(&local_oid, &upstream_oid)?;
+// Status via Platform + into_iter()
+let platform = repo.status(gix::progress::Discard)?;
+let iter = platform.into_iter(Vec::<BString>::new())?;
 
-// Staged changes (index vs HEAD)
-let staged = status.staged()?;
-
-// Unstaged changes (working tree vs index)
-let unstaged = status.unstaged()?;
-
-// Untracked files
-let untracked = status.untracked()?;
+for item in iter {
+    let item = item?;
+    match item {
+        gix::status::Item::TreeIndex(change) => {
+            // Staged: change.location() + match variant
+        }
+        gix::status::Item::IndexWorktree(wt_item) => {
+            // Unstaged/untracked from wt_item
+        }
+    }
+}
 
 // Conflicted entries (from index)
 let index = repo.index()?;
-let conflicted: Vec<_> = index
+let state: &gix::index::State = &index;
+let mut conflicted: Vec<_> = state
     .entries()
     .iter()
-    .filter(|e| e.stage() > 0)
-    .map(|e| e.path().to_string())
+    .filter(|e| e.stage() != gix::index::entry::Stage::Unconflicted)
+    .map(|e| e.path(state).to_string())
     .collect();
+conflicted.sort();
+conflicted.dedup();
 ```
 
 ---
