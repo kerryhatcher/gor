@@ -12,7 +12,7 @@ use crate::vcs::types::{ChangeType, FileStatus, VcsError, WorkingTreeStatus};
 
 /// A local git repository backed by `gix` (gitoxide).
 ///
-/// Uses [`gix::discover`] to find the repository root by walking up
+/// Uses [`gix::discover()`] to find the repository root by walking up
 /// parent directories from a given path.
 ///
 /// # Examples
