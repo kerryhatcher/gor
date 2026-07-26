@@ -18,6 +18,7 @@ pub mod repository;
 pub mod cache;
 pub mod label;
 pub mod org;
+pub mod project;
 pub mod secret;
 pub mod util;
 pub mod variable;

@@ -1,13 +1,13 @@
 //! Implementation of the `gor project` subcommand.
-//!
-//! Provides project listing for organizations and repositories.
 
 #![allow(clippy::print_stdout)]
 
 use crate::cli::ProjectCommand;
+use crate::cmd::util::truncate;
 use crate::render::print_json;
 use anyhow::Context;
-use gor_core::client::Client;
+use gor_core::Client;
+use gor_core::project::{self, ProjectScope};
 use gor_core::repository;
 
 /// Run the `gor project` subcommand.
@@ -67,6 +67,31 @@ pub fn run(cmd: ProjectCommand) -> anyhow::Result<()> {
     }
 }
 
+fn resolve_scope(
+    org: Option<&str>,
+    owner: Option<&str>,
+    repo: Option<&str>,
+) -> anyhow::Result<ProjectScope> {
+    if let Some(o) = org {
+        Ok(ProjectScope::Org(o.to_string()))
+    } else if let Some(u) = owner {
+        Ok(ProjectScope::User(u.to_string()))
+    } else if let Some(r) = repo {
+        let spec = repository::parse_repo_spec(r)?;
+        Ok(ProjectScope::Repo(spec))
+    } else {
+        let spec = repository::detect_remote().ok_or_else(|| {
+            anyhow::anyhow!("could not detect repository; specify --org, --owner, or --repo")
+        })?;
+        Ok(ProjectScope::Repo(spec))
+    }
+}
+
+fn build_client(hostname: Option<&str>) -> anyhow::Result<Client> {
+    let host = hostname.unwrap_or("github.com");
+    Client::new(host).map_err(|e| anyhow::anyhow!("failed to create HTTP client: {e}"))
+}
+
 fn list(
     org: Option<&str>,
     owner: Option<&str>,
@@ -76,46 +101,14 @@ fn list(
     json: Option<Vec<String>>,
     hostname: Option<&str>,
 ) -> anyhow::Result<()> {
-    let host = hostname.unwrap_or("github.com");
-    let client = Client::new(host).context("failed to create HTTP client")?;
+    let client = build_client(hostname)?;
 
     if v2 {
         return list_v2(&client, org, owner, limit, json);
     }
 
-    let path = if let Some(o) = org {
-        format!("/orgs/{o}/projects?per_page={}", limit.min(100))
-    } else if let Some(u) = owner {
-        format!("/users/{u}/projects?per_page={}", limit.min(100))
-    } else if let Some(r) = repo {
-        let spec = repository::parse_repo_spec(r).context("invalid repository spec")?;
-        format!(
-            "/repos/{}/{}/projects?per_page={}",
-            spec.owner,
-            spec.repo,
-            limit.min(100)
-        )
-    } else {
-        let spec = repository::detect_remote().ok_or_else(|| {
-            anyhow::anyhow!("could not detect repository; specify --org, --owner, or --repo")
-        })?;
-        format!(
-            "/repos/{}/{}/projects?per_page={}",
-            spec.owner,
-            spec.repo,
-            limit.min(100)
-        )
-    };
-
-    let response = client.get(&path).context("failed to fetch projects")?;
-    let status = response.status();
-    if !status.is_success() {
-        anyhow::bail!("failed to list projects: HTTP {status}");
-    }
-
-    let mut projects: Vec<serde_json::Value> =
-        response.json().context("failed to parse response")?;
-    projects.truncate(limit as usize);
+    let scope = resolve_scope(org, owner, repo)?;
+    let projects = project::list(&client, &scope, limit)?;
 
     if let Some(fields) = json {
         let fields_ref: Option<&[String]> = if fields.is_empty() {
@@ -123,7 +116,11 @@ fn list(
         } else {
             Some(&fields)
         };
-        print_json(&projects, fields_ref);
+        let values: Vec<serde_json::Value> = projects
+            .into_iter()
+            .map(|p| serde_json::to_value(p).unwrap_or_default())
+            .collect();
+        print_json(&values, fields_ref);
         return Ok(());
     }
 
@@ -137,12 +134,13 @@ fn list(
         "NUMBER", "TITLE", "STATE"
     );
     for p in &projects {
-        let number = p["number"].as_u64().unwrap_or(0);
-        let title = p["name"].as_str().unwrap_or("—");
-        let state = p["state"].as_str().unwrap_or("—");
-        let visibility = p["visibility"].as_str().unwrap_or("—");
-        let title_truncated = crate::cmd::util::truncate(title, 30);
-        println!("{number:<8}  {title_truncated:<30}  {state:<10}  {visibility}");
+        let title_truncated = truncate(&p.name, 30);
+        let state = p.state.as_deref().unwrap_or("—");
+        let visibility = p.visibility.as_deref().unwrap_or("—");
+        println!(
+            "{:<8}  {title_truncated:<30}  {state:<10}  {visibility}",
+            p.number
+        );
     }
 
     Ok(())
@@ -206,7 +204,7 @@ fn list_v2(
         let number = p["number"].as_u64().unwrap_or(0);
         let title = p["title"].as_str().unwrap_or("—");
         let closed = p["closed"].as_bool().unwrap_or(false);
-        let title_truncated = crate::cmd::util::truncate(title, 30);
+        let title_truncated = truncate(title, 30);
         println!("{number:<8}  {title_truncated:<30}  {closed}");
     }
 
@@ -221,21 +219,8 @@ fn view(
     json: Option<Vec<String>>,
     hostname: Option<&str>,
 ) -> anyhow::Result<()> {
-    let host = hostname.unwrap_or("github.com");
-    let client = Client::new(host).context("failed to create HTTP client")?;
-
-    let path = format!("/projects/{number}");
-    let response = client.get(&path).context("failed to fetch project")?;
-
-    let status = response.status();
-    if status == reqwest::StatusCode::NOT_FOUND {
-        anyhow::bail!("project #{number} not found");
-    }
-    if !status.is_success() {
-        anyhow::bail!("failed to view project: HTTP {status}");
-    }
-
-    let project: serde_json::Value = response.json().context("failed to parse response")?;
+    let client = build_client(hostname)?;
+    let project = project::view(&client, number)?;
 
     if web {
         if let Some(url) = project["html_url"].as_str() {
@@ -282,8 +267,7 @@ fn item_add(
     _owner: Option<&str>,
     hostname: Option<&str>,
 ) -> anyhow::Result<()> {
-    let host = hostname.unwrap_or("github.com");
-    let client = Client::new(host).context("failed to create HTTP client")?;
+    let client = build_client(hostname)?;
 
     let (item_type, item_id) = if let Some(i) = issue {
         ("Issue", i)
@@ -293,28 +277,9 @@ fn item_add(
         anyhow::bail!("specify --issue or --pr to add an item");
     };
 
-    let body = serde_json::json!({
-        "content_id": item_id,
-        "content_type": item_type,
-    });
-
-    let path = format!("/projects/{project}/items");
-    let body_bytes = serde_json::to_vec(&body).context("serialize")?;
-
-    let response = client
-        .request("POST", &path, &[], Some(body_bytes))
-        .context("failed to add project item")?;
-
-    let status = response.status();
-    if !status.is_success() {
-        let err: serde_json::Value = response.json().unwrap_or_default();
-        let msg = err["message"].as_str().unwrap_or("add failed");
-        anyhow::bail!("failed to add item to project #{project}: {msg}");
-    }
-
-    let result: serde_json::Value = response.json().context("failed to parse response")?;
-    let item_id = result["id"].as_u64().unwrap_or(0);
-    println!("Added {item_type} #{item_id} to project #{project} (item ID: {item_id})");
+    let result = project::item_add(&client, project, item_id, item_type)?;
+    let result_item_id = result["id"].as_u64().unwrap_or(0);
+    println!("Added {item_type} #{item_id} to project #{project} (item ID: {result_item_id})");
 
     Ok(())
 }
