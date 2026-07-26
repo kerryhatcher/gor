@@ -11,6 +11,8 @@ recieve = "receive"
 # Valid crate names — not typos.
 ratatui = "ratatui"
 pitty = "pitty"
+worktree = "worktree"
+workt = "workt"
 
 [files]
 # Don't spellcheck lockfiles or build output.
