@@ -15,7 +15,9 @@ pub mod host;
 pub mod keyring_store;
 pub mod repository;
 
+pub mod cache;
 pub mod label;
+pub mod org;
 pub mod util;
 
 /// Convenience re-exports of key types.

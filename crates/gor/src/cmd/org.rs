@@ -1,13 +1,12 @@
 //! Implementation of the `gor org` subcommand.
-//!
-//! Provides organization listing for the authenticated user.
 
 #![allow(clippy::print_stdout)]
 
 use crate::cli::OrgCommand;
+use crate::cmd::util::truncate;
 use crate::render::print_json;
-use anyhow::Context;
-use gor_core::client::Client;
+use gor_core::Client;
+use gor_core::org::{self, Organization};
 
 /// Run the `gor org` subcommand.
 ///
@@ -30,29 +29,15 @@ pub fn run(cmd: OrgCommand) -> anyhow::Result<()> {
     }
 }
 
-/// Execute `gor org list`.
-///
-/// Lists organizations the authenticated user belongs to.
-///
-/// # Errors
-///
-/// Returns an error if the API request fails.
-fn list(limit: u32, json: Option<Vec<String>>, hostname: Option<&str>) -> anyhow::Result<()> {
+fn build_client(hostname: Option<&str>) -> anyhow::Result<Client> {
     let host = hostname.unwrap_or("github.com");
-    let client = Client::new(host).context("failed to create HTTP client")?;
+    Client::new(host).map_err(|e| anyhow::anyhow!("failed to create HTTP client: {e}"))
+}
 
-    let path = format!("/user/orgs?per_page={}", limit.min(100));
-    let response = client.get(&path).context("failed to fetch organizations")?;
+fn list(limit: u32, json: Option<Vec<String>>, hostname: Option<&str>) -> anyhow::Result<()> {
+    let client = build_client(hostname)?;
 
-    let status = response.status();
-    if !status.is_success() {
-        anyhow::bail!("failed to list organizations: HTTP {status}");
-    }
-
-    let mut orgs: Vec<serde_json::Value> =
-        response.json().context("failed to parse orgs response")?;
-
-    orgs.truncate(limit as usize);
+    let orgs = org::list(&client, limit)?;
 
     if let Some(fields) = json {
         let fields_ref: Option<&[String]> = if fields.is_empty() {
@@ -60,7 +45,11 @@ fn list(limit: u32, json: Option<Vec<String>>, hostname: Option<&str>) -> anyhow
         } else {
             Some(&fields)
         };
-        print_json(&orgs, fields_ref);
+        let values: Vec<serde_json::Value> = orgs
+            .into_iter()
+            .map(|o| serde_json::to_value(o).unwrap_or_default())
+            .collect();
+        print_json(&values, fields_ref);
         return Ok(());
     }
 
@@ -68,36 +57,15 @@ fn list(limit: u32, json: Option<Vec<String>>, hostname: Option<&str>) -> anyhow
     Ok(())
 }
 
-/// Execute `gor org view`.
-///
-/// Views an organization's profile and metadata.
-///
-/// # Errors
-///
-/// Returns an error if the API request fails.
 fn view(
-    org: &str,
+    org_name: &str,
     web: bool,
     json: Option<Vec<String>>,
     hostname: Option<&str>,
 ) -> anyhow::Result<()> {
-    let host = hostname.unwrap_or("github.com");
-    let client = Client::new(host).context("failed to create HTTP client")?;
+    let client = build_client(hostname)?;
+    let org_data = org::view(&client, org_name)?;
 
-    let path = format!("/orgs/{org}");
-    let response = client.get(&path).context("failed to fetch organization")?;
-
-    let status = response.status();
-    if status == reqwest::StatusCode::NOT_FOUND {
-        anyhow::bail!("organization '{org}' not found");
-    }
-    if !status.is_success() {
-        anyhow::bail!("failed to view organization: HTTP {status}");
-    }
-
-    let org_data: serde_json::Value = response.json().context("failed to parse response")?;
-
-    // --web / -w: open in browser
     if web {
         if let Some(url) = org_data["html_url"].as_str() {
             crate::cmd::browse::open_in_browser(url);
@@ -105,7 +73,6 @@ fn view(
         }
     }
 
-    // --json: output as JSON
     if let Some(fields) = json {
         let fields_ref: Option<&[String]> = if fields.is_empty() {
             None
@@ -116,7 +83,6 @@ fn view(
         return Ok(());
     }
 
-    // Default: print details
     let name = org_data["name"].as_str().unwrap_or("—");
     let description = org_data["description"].as_str().unwrap_or("No description");
     let location = org_data["location"].as_str().unwrap_or("—");
@@ -136,8 +102,7 @@ fn view(
     Ok(())
 }
 
-/// Print a formatted organization list table.
-fn print_org_table(orgs: &[serde_json::Value]) {
+fn print_org_table(orgs: &[Organization]) {
     if orgs.is_empty() {
         println!("No organizations found.");
         return;
@@ -149,11 +114,8 @@ fn print_org_table(orgs: &[serde_json::Value]) {
     println!("{:<login_width$}  {:<desc_width$}", "LOGIN", "DESCRIPTION");
 
     for org in orgs {
-        let login = org["login"].as_str().unwrap_or("—");
-        let description = org["description"].as_str().unwrap_or("—");
-
-        let desc_truncated = crate::cmd::util::truncate(description, desc_width);
-
+        let login = &org.login;
+        let desc_truncated = truncate(org.description.as_deref().unwrap_or("—"), desc_width);
         println!("{login:<login_width$}  {desc_truncated:<desc_width$}");
     }
 }
@@ -164,18 +126,23 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    fn make_org(login: &str, description: Option<&str>) -> Organization {
+        serde_json::from_value(json!({
+            "login": login,
+            "description": description,
+        }))
+        .expect("valid org")
+    }
+
     #[test]
     fn print_org_table_basic() {
-        let orgs = vec![json!({
-            "login": "my-org",
-            "description": "My organization"
-        })];
+        let orgs = vec![make_org("my-org", Some("My organization"))];
         print_org_table(&orgs);
     }
 
     #[test]
     fn print_org_table_empty() {
-        let orgs: Vec<serde_json::Value> = vec![];
+        let orgs: Vec<Organization> = vec![];
         print_org_table(&orgs);
     }
 }
